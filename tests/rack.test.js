@@ -112,6 +112,23 @@ test('skip and remove stay on one timer, and the freed beep is reused', () => {
   rack.destroy();
 });
 
+test('a stopwatch keeps its own clock next to a countdown', () => {
+  const { rack, advance } = harness();
+  const watch = rack.add({ mode: 'stopwatch' }, { label: 'Stop' });
+  const countdown = rack.add({ mode: 'countdown', durationMs: 60_000 });
+  watch.timer.start();
+  countdown.timer.start();
+  advance(5_000);
+  watch.timer.lap();
+  watch.timer.pause();
+  advance(3_000);
+  assert.equal(watch.timer.getSnapshot().totalElapsedMs, 5_000);
+  assert.equal(watch.timer.getSnapshot().laps[0].splitMs, 5_000);
+  assert.equal(countdown.timer.getSnapshot().phase.remainingMs, 52_000);
+  assert.equal(countdown.timer.getSnapshot().status, 'running');
+  rack.destroy();
+});
+
 test('saved state keeps several timers and still reads the old single-timer shape', () => {
   const modern = normalizeSaved({
     sound: false,

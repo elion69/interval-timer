@@ -44,7 +44,7 @@ export function createBeeps() {
     const audio = context();
     if (!audio) return;
     const v = voiceOf(voice);
-    if (cue.kind === 'tick') {
+    if (cue.kind === 'tick' || cue.kind === 'lap') {
       tone(audio, { freq: v.tick, dur: 0.05, gain: Math.min(0.1, v.gain), type: v.wave });
       if (v.doubleTick) tone(audio, { freq: v.tick * 1.25, dur: 0.05, gain: Math.min(0.08, v.gain), type: v.wave, when: 0.07 });
       return;
@@ -104,7 +104,7 @@ export function createAlerts() {
 
   function pattern(kind, voice, phaseType) {
     const index = Math.abs(Number(voice) || 0) % 4;
-    if (kind === 'tick') return BUZZ.tick[index];
+    if (kind === 'tick' || kind === 'lap') return BUZZ.tick[index];
     if (kind === 'complete') return BUZZ.complete[index];
     if (phaseType === 'work' || phaseType === 'countdown') return BUZZ.work[index];
     return BUZZ.rest[index];

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createIntervalTimer, planTimer } from '../src/timer/engine.js';
-import { formatHMS, formatPhase } from '../src/timer/format.js';
+import { digitsToMs, formatHMS, formatPhase, formatStopwatch } from '../src/timer/format.js';
 import { chipLabel, configsEqual } from '../src/timer/presets.js';
 
 function harness(config) {
@@ -241,6 +241,40 @@ test('the scheduler wakes in time for the three-second beep', () => {
   timer.start();
   assert.equal(delays.at(-1), 7_000);
   timer.destroy();
+});
+
+test('stopwatch counts up from the clock, laps, and resets to idle', () => {
+  const { timer, advance, cues } = harness({ mode: 'stopwatch' });
+  timer.start();
+  advance(12_500);
+  timer.lap();
+  advance(2_000);
+  timer.pause();
+  advance(9_000);
+  const snap = timer.getSnapshot();
+  assert.equal(snap.status, 'paused');
+  assert.equal(snap.totalElapsedMs, 14_500);
+  assert.equal(snap.laps.length, 1);
+  assert.equal(snap.laps[0].splitMs, 12_500);
+  assert.equal(snap.laps[0].totalMs, 12_500);
+  assert.ok(Math.abs(snap.phase.progress - ((14_500 % 60_000) / 60_000)) < 1e-12);
+  assert.equal(cues.filter((cue) => cue.startsWith('tick:')).length, 0);
+  assert.equal(cues.filter((cue) => cue === 'lap').length, 1);
+  timer.restart();
+  assert.equal(timer.getSnapshot().status, 'idle');
+  assert.equal(timer.getSnapshot().totalElapsedMs, 0);
+  assert.equal(timer.getSnapshot().laps.length, 0);
+  timer.destroy();
+});
+
+test('digits fill from the right, so 2000 is 20:00', () => {
+  assert.equal(digitsToMs('2000').text, '20:00');
+  assert.equal(digitsToMs('2000').ms, 20 * 60_000);
+  assert.equal(digitsToMs('500').text, '05:00');
+  assert.equal(digitsToMs('45').text, '00:45');
+  assert.equal(digitsToMs('').text, '00:00');
+  assert.equal(digitsToMs('20000').text, '2:00:00');
+  assert.equal(formatStopwatch(12_480), '00:12.48');
 });
 
 test('chip labels prefer a saved preset name', () => {

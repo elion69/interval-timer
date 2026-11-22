@@ -4,7 +4,7 @@ import { createAlerts } from './audio.js';
 import { createWakeLock } from './wake.js';
 import { loadState, normalizeSaved, saveState } from './storage.js';
 import { BUILTIN_PRESETS, chipLabel, configsEqual } from './presets.js';
-import { formatHMS, formatPart, formatPhase } from './format.js';
+import { digitsToMs, formatElapsedHMS, formatHMS, formatPart, formatPhase, formatStopwatch, msToDigits } from './format.js';
 
 const CX = 170;
 const ARC_R = 143;
@@ -24,6 +24,8 @@ const ICON = {
   play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.2v13.6L19.2 12 8 5.2z"/></svg>`,
   pause: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor"/></svg>`,
   skip: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 5.4v13.2L14.6 12 5 5.4z"/><rect x="16.2" y="5.4" width="2.6" height="13.2" rx="0.6" fill="currentColor"/></svg>`,
+  stopwatch: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 13V9.2M9.2 3.2h5.6M12 3.2v2.2"/></svg>`,
+  lap: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 4v16M6 5h10l-2.2 3.2L16 11.5H6"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
 };
@@ -95,9 +97,13 @@ export function mountTimer(container, options = {}) {
         <button type="button" class="go-face" data-testid="center">
           <span class="go-face-icon" data-testid="phase-icon"></span>
           <span class="go-face-label" data-testid="phase-label">go</span>
-          <span class="go-face-time" data-testid="phase-time">01:00</span>
+          <span class="go-face-clock">
+            <span class="go-face-time" data-testid="phase-time">01:00</span>
+            <span class="go-face-frac" data-testid="phase-frac" hidden></span>
+          </span>
         </button>
       </div>
+      <div class="go-laps" data-testid="laps" hidden></div>
       <div class="go-stack" data-testid="stack" hidden></div>
       <div class="go-controls">
         <button type="button" data-testid="restart" aria-label="Restart">${ICON.restart}</button>
@@ -112,6 +118,7 @@ export function mountTimer(container, options = {}) {
           <div class="go-segment" role="group" aria-label="Mode">
             <button type="button" data-mode="countdown" aria-pressed="false">Countdown</button>
             <button type="button" data-mode="interval" aria-pressed="true">Intervals</button>
+            <button type="button" data-mode="stopwatch" aria-pressed="false">Stopwatch</button>
           </div>
           <p class="go-warn" data-warn hidden>This restarts the timer on screen. Any others keep running.</p>
           <p class="go-note" data-add-note hidden>It starts right away, alongside whatever is already running, and uses a different beep.</p>
@@ -120,7 +127,7 @@ export function mountTimer(container, options = {}) {
               <span class="go-field-label">Duration</span>
               <div class="go-stepper">
                 <button type="button" data-bump="durationMs" data-dir="-1" aria-label="Shorten duration">−</button>
-                <div class="go-stepper-value" data-value="durationMs">05:00</div>
+                <button type="button" class="go-stepper-value" data-value="durationMs" data-testid="field-duration">05:00</button>
                 <button type="button" data-bump="durationMs" data-dir="1" aria-label="Lengthen duration">+</button>
               </div>
             </div>
@@ -131,7 +138,7 @@ export function mountTimer(container, options = {}) {
               <span class="go-field-label">Work</span>
               <div class="go-stepper">
                 <button type="button" data-bump="workMs" data-dir="-1" aria-label="Shorten work">−</button>
-                <div class="go-stepper-value" data-value="workMs">01:00</div>
+                <button type="button" class="go-stepper-value" data-value="workMs" data-testid="field-work">01:00</button>
                 <button type="button" data-bump="workMs" data-dir="1" aria-label="Lengthen work">+</button>
               </div>
               <div class="go-quick" data-quick="work"></div>
@@ -140,7 +147,7 @@ export function mountTimer(container, options = {}) {
               <span class="go-field-label">Rest</span>
               <div class="go-stepper">
                 <button type="button" data-bump="restMs" data-dir="-1" aria-label="Shorten rest">−</button>
-                <div class="go-stepper-value" data-value="restMs">00:00</div>
+                <button type="button" class="go-stepper-value" data-value="restMs" data-testid="field-rest">00:00</button>
                 <button type="button" data-bump="restMs" data-dir="1" aria-label="Lengthen rest">+</button>
               </div>
               <div class="go-quick" data-quick="rest"></div>
@@ -149,7 +156,7 @@ export function mountTimer(container, options = {}) {
               <span class="go-field-label">Warm-up</span>
               <div class="go-stepper">
                 <button type="button" data-bump="warmupMs" data-dir="-1" aria-label="Shorten warm-up">−</button>
-                <div class="go-stepper-value" data-value="warmupMs">00:00</div>
+                <button type="button" class="go-stepper-value" data-value="warmupMs" data-testid="field-warmup">00:00</button>
                 <button type="button" data-bump="warmupMs" data-dir="1" aria-label="Lengthen warm-up">+</button>
               </div>
             </div>
@@ -167,6 +174,9 @@ export function mountTimer(container, options = {}) {
             </div>
             <div class="go-quick" data-quick="rounds"></div>
           </div>
+          <div data-panel="stopwatch" hidden>
+            <p class="go-note">Counts up from zero. Lap and reset sit on the main screen, and it keeps running next to your other timers.</p>
+          </div>
           <div class="go-summary" data-testid="summary"></div>
           <span class="go-field-label">Presets</span>
           <div class="go-presets" data-testid="presets"></div>
@@ -181,6 +191,25 @@ export function mountTimer(container, options = {}) {
           <div class="go-done-wrap">
             <button type="button" class="go-done" data-testid="done">Done</button>
           </div>
+        </div>
+      </div>
+      <div class="go-keypad" data-testid="keypad" hidden>
+        <p class="go-keypad-label" data-testid="keypad-label">Work</p>
+        <div class="go-keypad-display" data-testid="keypad-display">00:00</div>
+        <p class="go-keypad-hint">Type 2000 for 20:00</p>
+        <div class="go-keys">
+          <button type="button" data-digit="1">1</button>
+          <button type="button" data-digit="2">2</button>
+          <button type="button" data-digit="3">3</button>
+          <button type="button" data-digit="4">4</button>
+          <button type="button" data-digit="5">5</button>
+          <button type="button" data-digit="6">6</button>
+          <button type="button" data-digit="7">7</button>
+          <button type="button" data-digit="8">8</button>
+          <button type="button" data-digit="9">9</button>
+          <button type="button" data-key="back" aria-label="Delete digit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 6.5h10.3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H8.2L3.5 12l4.7-5.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11 10l4 4M15 10l-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+          <button type="button" data-digit="0">0</button>
+          <button type="button" class="go-key-ok" data-key="ok">OK</button>
         </div>
       </div>
       <div class="go-toast" data-testid="toast" role="status"></div>
@@ -289,8 +318,9 @@ export function mountTimer(container, options = {}) {
 
   function captureRun(timer) {
     const snap = timer.getSnapshot();
-    if (snap.status === 'running') return { status: 'running', origin: Date.now() - snap.totalElapsedMs };
-    if (snap.status === 'paused') return { status: 'paused', elapsedMs: snap.totalElapsedMs };
+    const laps = snap.mode === 'stopwatch' ? snap.laps : [];
+    if (snap.status === 'running') return { status: 'running', origin: Date.now() - snap.totalElapsedMs, laps };
+    if (snap.status === 'paused') return { status: 'paused', elapsedMs: snap.totalElapsedMs, laps };
     if (snap.status === 'complete') return { status: 'complete' };
     return null;
   }
@@ -353,7 +383,10 @@ export function mountTimer(container, options = {}) {
     const totalText = snap.mode === 'interval' && snap.rounds == null
       ? (snap.status === 'idle' ? '∞' : formatHMS(snap.totalElapsedMs))
       : formatHMS(snap.status === 'complete' ? 0 : (snap.totalRemainingMs ?? snap.totalDurationMs));
-    if (snap.mode === 'interval' && snap.rounds == null && snap.status !== 'idle') {
+    if (snap.mode === 'stopwatch') {
+      totalEl.textContent = formatElapsedHMS(snap.totalElapsedMs);
+      captionEl.textContent = 'elapsed';
+    } else if (snap.mode === 'interval' && snap.rounds == null && snap.status !== 'idle') {
       totalEl.textContent = formatHMS(snap.totalElapsedMs);
       captionEl.textContent = 'elapsed';
     } else if (snap.rounds == null && snap.mode === 'interval') {
@@ -374,10 +407,22 @@ export function mountTimer(container, options = {}) {
       phaseIcon.innerHTML = ICON[iconKey] || ICON.work;
       lastIcon = iconKey;
     }
-    phaseLabel.textContent = snap.status === 'paused' ? 'paused' : snap.phase.label;
-    phaseTime.textContent = formatPhase(snap.phase.remainingMs);
+    const fracEl = q('[data-testid="phase-frac"]');
+    if (snap.mode === 'stopwatch') {
+      const [main, frac] = formatStopwatch(snap.totalElapsedMs).split('.');
+      phaseTime.textContent = main;
+      fracEl.hidden = false;
+      fracEl.textContent = `.${frac}`;
+      phaseLabel.textContent = snap.status === 'paused' ? 'paused' : `lap ${snap.laps.length + 1}`;
+    } else {
+      fracEl.hidden = true;
+      fracEl.textContent = '';
+      phaseLabel.textContent = snap.status === 'paused' ? 'paused' : snap.phase.label;
+      phaseTime.textContent = formatPhase(snap.phase.remainingMs);
+    }
     face.setAttribute('fill', snap.phase.color);
     center.classList.toggle('is-done', snap.phase.type === 'done');
+    center.classList.toggle('is-dial', snap.mode === 'stopwatch');
     center.setAttribute('aria-label', snap.status === 'running' ? 'Pause' : snap.status === 'paused' ? 'Resume' : 'Start');
 
     const progress = snap.status === 'complete' ? 1 : snap.phase.progress;
@@ -389,9 +434,11 @@ export function mountTimer(container, options = {}) {
     arc.setAttribute('stroke-linecap', progress > 0.985 ? 'butt' : 'round');
 
     const marker = snap.phase.type === 'countdown' || snap.phase.type === 'done';
-    const text = snap.phase.type === 'done' || snap.mode === 'countdown'
-      ? ''
-      : snap.roundsRemaining == null ? '∞' : String(snap.roundsRemaining);
+    const text = snap.mode === 'stopwatch'
+      ? String(snap.laps.length + 1)
+      : snap.phase.type === 'done' || snap.mode === 'countdown'
+        ? ''
+        : snap.roundsRemaining == null ? '∞' : String(snap.roundsRemaining);
     const angle = -Math.PI / 2 + Math.min(1, progress) * Math.PI * 2;
     const x = CX + Math.cos(angle) * ARC_R;
     const y = CX + Math.sin(angle) * ARC_R;
@@ -411,18 +458,58 @@ export function mountTimer(container, options = {}) {
       toggleBtn.innerHTML = running ? ICON.pause : ICON.play;
     }
     toggleBtn.setAttribute('aria-label', running ? 'Pause' : snap.status === 'paused' ? 'Resume' : 'Start');
-    const canSkip = snap.status === 'running' || snap.status === 'paused';
-    skipBtn.disabled = !canSkip;
+    const stopwatch = snap.mode === 'stopwatch';
+    if (skipBtn.dataset.mode !== (stopwatch ? 'lap' : 'skip')) {
+      skipBtn.dataset.mode = stopwatch ? 'lap' : 'skip';
+      skipBtn.innerHTML = stopwatch ? ICON.lap : ICON.skip;
+    }
+    skipBtn.disabled = stopwatch ? !running : !(running || snap.status === 'paused');
+    skipBtn.setAttribute('aria-label', stopwatch ? 'Lap' : 'Skip to next phase');
+    restartBtn.disabled = stopwatch && snap.totalElapsedMs === 0 && snap.status === 'idle';
+    restartBtn.setAttribute('aria-label', stopwatch ? 'Reset' : 'Restart');
 
-    const title = running
-      ? `${formatPhase(snap.phase.remainingMs)} · ${snap.phase.label}`
-      : 'Interval Timer';
+    const title = stopwatch
+      ? (running ? formatStopwatch(snap.totalElapsedMs) : 'Stopwatch')
+      : running
+        ? `${formatPhase(snap.phase.remainingMs)} · ${snap.phase.label}`
+        : 'Interval Timer';
     if (title !== lastTitle) {
       document.title = title;
       lastTitle = title;
     }
     paintWake();
     renderStack();
+    renderLaps(snap);
+  }
+
+  const lapsEl = q('[data-testid="laps"]');
+
+  function lapRow(label, splitMs, totalMs, current) {
+    const row = document.createElement('div');
+    row.className = current ? 'go-lap is-now' : 'go-lap';
+    row.innerHTML = `<span>${label}</span><span>${formatStopwatch(splitMs)}</span><span>${formatStopwatch(totalMs)}</span>`;
+    return row;
+  }
+
+  function renderLaps(snap) {
+    if (snap.mode !== 'stopwatch' || (snap.laps.length === 0 && snap.totalElapsedMs === 0 && snap.status === 'idle')) {
+      lapsEl.hidden = true;
+      lapsEl.replaceChildren();
+      shell.dataset.laps = 'off';
+      return;
+    }
+    const last = snap.laps[snap.laps.length - 1];
+    const split = snap.totalElapsedMs - (last?.totalMs || 0);
+    const head = document.createElement('div');
+    head.className = 'go-lap go-lap-head';
+    head.innerHTML = '<span>Lap</span><span>Split</span><span>Total</span>';
+    const rows = [head, lapRow(String(snap.laps.length + 1), split, snap.totalElapsedMs, true)];
+    for (let i = snap.laps.length - 1; i >= 0; i -= 1) {
+      rows.push(lapRow(String(snap.laps[i].n), snap.laps[i].splitMs, snap.laps[i].totalMs, false));
+    }
+    lapsEl.replaceChildren(...rows);
+    lapsEl.hidden = false;
+    shell.dataset.laps = 'on';
   }
 
   const MINI_C = 2 * Math.PI * 16;
@@ -490,9 +577,13 @@ export function mountTimer(container, options = {}) {
     const snap = session.timer.getSnapshot();
     const name = session.label || chipLabel(snap.config, presets());
     row.querySelector('.go-row-name').textContent = name;
-    row.querySelector('.go-row-time').textContent = formatPhase(snap.phase.remainingMs);
+    row.querySelector('.go-row-time').textContent = snap.mode === 'stopwatch'
+      ? formatStopwatch(snap.totalElapsedMs).replace(/\.\d+$/, '')
+      : formatPhase(snap.phase.remainingMs);
     const phase = row.querySelector('.go-row-phase');
-    phase.textContent = snap.status === 'paused' ? 'paused' : snap.phase.label;
+    phase.textContent = snap.mode === 'stopwatch'
+      ? (snap.status === 'running' ? 'run' : snap.status === 'paused' ? 'paused' : 'ready')
+      : (snap.status === 'paused' ? 'paused' : snap.phase.label);
     phase.style.color = snap.phase.type === 'done' ? '#ffffff' : snap.phase.color;
     row.querySelector('[data-mini-face]').setAttribute('fill', snap.phase.color);
     const arcNode = row.querySelector('[data-mini-arc]');
@@ -515,6 +606,7 @@ export function mountTimer(container, options = {}) {
 
   function summaryText(config) {
     const plan = planTimer(config);
+    if (config.mode === 'stopwatch') return 'Counts up';
     if (!plan.limited) {
       const rest = config.restMs > 0 ? ` · ${formatPhase(config.restMs)} rest` : '';
       return `Unlimited · ${formatPhase(config.workMs)} work${rest}`;
@@ -523,12 +615,12 @@ export function mountTimer(container, options = {}) {
   }
 
   function paintSheet() {
-    const interval = draft.mode === 'interval';
     for (const btn of shell.querySelectorAll('[data-mode]')) {
       btn.setAttribute('aria-pressed', String(btn.dataset.mode === draft.mode));
     }
-    q('[data-panel="interval"]').hidden = !interval;
-    q('[data-panel="countdown"]').hidden = interval;
+    q('[data-panel="interval"]').hidden = draft.mode !== 'interval';
+    q('[data-panel="countdown"]').hidden = draft.mode !== 'countdown';
+    q('[data-panel="stopwatch"]').hidden = draft.mode !== 'stopwatch';
     const setValue = (key, text) => {
       const node = q(`[data-value="${key}"]`);
       if (node) node.textContent = text;
@@ -790,10 +882,11 @@ export function mountTimer(container, options = {}) {
   }
 
   function restoreSession(timer, run) {
+    const laps = run?.laps || [];
     if (run?.status === 'running' && Number.isFinite(run.origin)) {
-      timer.restore({ elapsedMs: Math.max(0, Date.now() - run.origin), running: true });
+      timer.restore({ elapsedMs: Math.max(0, Date.now() - run.origin), running: true, laps });
     } else if (run?.status === 'paused' && Number.isFinite(run.elapsedMs)) {
-      timer.restore({ elapsedMs: Math.max(0, run.elapsedMs), running: false });
+      timer.restore({ elapsedMs: Math.max(0, run.elapsedMs), running: false, laps });
     } else if (run?.status === 'complete') {
       timer.restore({ elapsedMs: Number.MAX_SAFE_INTEGER, running: false });
     }
@@ -836,7 +929,9 @@ export function mountTimer(container, options = {}) {
   });
   skipBtn.addEventListener('click', () => {
     alerts.unlock();
-    focusedTimer().skip();
+    const timer = focusedTimer();
+    if (timer.getSnapshot().mode === 'stopwatch') timer.lap();
+    else timer.skip();
   });
   shell.addEventListener('pointerdown', () => alerts.unlock(), { passive: true });
 
@@ -912,7 +1007,83 @@ export function mountTimer(container, options = {}) {
     installBtn.hidden = true;
   });
 
+  const keypad = q('[data-testid="keypad"]');
+  const keypadDisplay = q('[data-testid="keypad-display"]');
+  const keypadLabel = q('[data-testid="keypad-label"]');
+  let keypadField = null;
+  let keypadDigits = '';
+  const FIELD_LABEL = { durationMs: 'Countdown', workMs: 'Work', restMs: 'Rest', warmupMs: 'Warm-up' };
+
+  function paintKeypad() {
+    keypadDisplay.textContent = digitsToMs(keypadDigits).text;
+    keypadLabel.textContent = FIELD_LABEL[keypadField] || 'Time';
+  }
+
+  function openKeypad(field) {
+    keypadField = field;
+    keypadDigits = '';
+    paintKeypad();
+    keypad.hidden = false;
+  }
+
+  function closeKeypad() {
+    keypad.hidden = true;
+    keypadField = null;
+  }
+
+  function pushDigit(digit) {
+    if (keypadDigits.length >= 6) return;
+    keypadDigits = `${keypadDigits}${digit}`.replace(/^0+/, '');
+    paintKeypad();
+  }
+
+  function commitKeypad() {
+    if (!keypadField) return;
+    if (!keypadDigits) {
+      closeKeypad();
+      return;
+    }
+    const { ms } = digitsToMs(keypadDigits);
+    const optional = keypadField === 'restMs' || keypadField === 'warmupMs';
+    const min = optional ? 0 : 1000;
+    const max = keypadField === 'warmupMs' ? 60 * 60 * 1000 : 3 * 60 * 60 * 1000;
+    draft = { ...draft, [keypadField]: Math.min(max, Math.max(min, ms)) };
+    closeKeypad();
+    onEdit();
+  }
+
+  for (const value of shell.querySelectorAll('.go-stepper-value[data-value]')) {
+    if (value.dataset.value === 'rounds') continue;
+    value.addEventListener('click', () => openKeypad(value.dataset.value));
+  }
+  keypad.addEventListener('click', (event) => {
+    const digit = event.target.closest('[data-digit]');
+    const key = event.target.closest('[data-key]');
+    if (digit) pushDigit(digit.dataset.digit);
+    else if (key?.dataset.key === 'back') {
+      keypadDigits = keypadDigits.slice(0, -1);
+      paintKeypad();
+    } else if (key?.dataset.key === 'ok') commitKeypad();
+  });
+
   function onKey(event) {
+    if (!keypad.hidden) {
+      if (event.key >= '0' && event.key <= '9') {
+        event.preventDefault();
+        pushDigit(event.key);
+      } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        keypadDigits = keypadDigits.slice(0, -1);
+        paintKeypad();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        commitKeypad();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeKeypad();
+      }
+      return;
+    }
     if (event.key === 'Escape' && backdrop.classList.contains('is-open')) {
       closeSheet(intent !== 'add');
       return;
@@ -921,8 +1092,10 @@ export function mountTimer(container, options = {}) {
     if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
       userToggle();
-    } else if (event.key === 'ArrowRight') {
-      focusedTimer().skip();
+    } else if (event.key === 'ArrowRight' || event.key === 'l' || event.key === 'L') {
+      const timer = focusedTimer();
+      if (timer.getSnapshot().mode === 'stopwatch') timer.lap();
+      else if (event.key === 'ArrowRight') timer.skip();
     } else if (event.key === 'r' || event.key === 'R') {
       focusedTimer().restart();
     }

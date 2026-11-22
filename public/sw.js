@@ -1,4 +1,4 @@
-const CACHE = 'interval-timer-v2';
+const CACHE = 'interval-timer-v3';
 const SHELL = [
   '/',
   '/index.html',

@@ -6,13 +6,22 @@ function cleanConfig(config) {
   return { ...DEFAULT_CONFIG, ...(config || {}) };
 }
 
+function cleanLaps(laps) {
+  if (!Array.isArray(laps)) return [];
+  return laps.slice(0, 100).map((lap) => ({
+    splitMs: Math.max(0, Number(lap.splitMs) || 0),
+    totalMs: Math.max(0, Number(lap.totalMs) || 0),
+  })).filter((lap) => lap.totalMs > 0);
+}
+
 function cleanRun(run) {
   if (!run || typeof run !== 'object') return null;
+  const laps = cleanLaps(run.laps);
   if (run.status === 'running' && Number.isFinite(Number(run.origin))) {
-    return { status: 'running', origin: Number(run.origin) };
+    return { status: 'running', origin: Number(run.origin), laps };
   }
   if (run.status === 'paused' && Number.isFinite(Number(run.elapsedMs))) {
-    return { status: 'paused', elapsedMs: Number(run.elapsedMs) };
+    return { status: 'paused', elapsedMs: Number(run.elapsedMs), laps };
   }
   if (run.status === 'complete') return { status: 'complete' };
   return null;

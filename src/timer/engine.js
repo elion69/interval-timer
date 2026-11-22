@@ -23,7 +23,7 @@ function clampInt(value, min, max, fallback) {
 
 export function normalizeConfig(partial = {}, base = DEFAULT_CONFIG) {
   const merged = { ...base, ...partial };
-  const mode = merged.mode === 'countdown' ? 'countdown' : 'interval';
+  const mode = merged.mode === 'countdown' ? 'countdown' : merged.mode === 'stopwatch' ? 'stopwatch' : 'interval';
   const unlimited = merged.rounds == null || merged.rounds === 'unlimited';
   return {
     mode,
@@ -42,6 +42,9 @@ export function normalizeConfig(partial = {}, base = DEFAULT_CONFIG) {
  */
 export function planTimer(input) {
   const config = normalizeConfig(input);
+  if (config.mode === 'stopwatch') {
+    return { config, limited: false, stopwatch: true, totalMs: null, rounds: null, phases: null };
+  }
   if (config.mode === 'countdown') {
     const durationMs = config.durationMs;
     return {
@@ -123,7 +126,14 @@ function locateUnlimited(plan, elapsed) {
   return describe('rest', round, plan.restMs, restInto, index, elapsed - restInto);
 }
 
+function locateStopwatch(elapsed) {
+  const ms = Math.max(0, elapsed);
+  const into = ms % 60000;
+  return describe('stopwatch', 0, 60000, into, 0, ms - into);
+}
+
 function locate(plan, elapsed) {
+  if (plan.stopwatch) return locateStopwatch(elapsed);
   if (!plan.limited) return locateUnlimited(plan, elapsed);
   if (elapsed >= plan.totalMs) return null;
   return locateLimited(plan, elapsed);
@@ -140,7 +150,7 @@ function roundsRemaining(phase, rounds) {
 }
 
 function tickBucket(phase) {
-  if (!phase || phase.elapsedMs < 80) return null;
+  if (!phase || phase.type === 'stopwatch' || phase.elapsedMs < 80) return null;
   const rem = phase.remainingMs;
   let bucket = null;
   if (rem <= 1000 && rem > 0) bucket = 1;
@@ -173,6 +183,7 @@ export function createIntervalTimer(config, deps = {}) {
   let lastPhaseKey = null;
   let announcedTick = null;
   let lastElapsed = 0;
+  let laps = [];
   let timerId = null;
   let syncing = false;
   const listeners = new Map();
@@ -243,6 +254,7 @@ export function createIntervalTimer(config, deps = {}) {
       totalElapsedMs,
       totalRemainingMs: plan.limited ? Math.max(0, plan.totalMs - totalElapsedMs) : null,
       totalDurationMs: plan.totalMs,
+      laps: laps.map((lap, index) => ({ n: index + 1, splitMs: lap.splitMs, totalMs: lap.totalMs })),
       config: { ...plan.config },
     };
   }
@@ -370,7 +382,8 @@ export function createIntervalTimer(config, deps = {}) {
   }
 
   function restart() {
-    const keepRunning = status === 'running';
+    const keepRunning = status === 'running' && !plan.stopwatch;
+    laps = [];
     offsetMs = 0;
     runStartedAt = keepRunning ? now() : null;
     lastPhaseKey = null;
@@ -414,9 +427,22 @@ export function createIntervalTimer(config, deps = {}) {
     return snap;
   }
 
+  function lap() {
+    if (!plan.stopwatch || status !== 'running') return getSnapshot();
+    if (laps.length >= 100) return getSnapshot();
+    const total = readElapsed();
+    const prev = laps.length ? laps[laps.length - 1].totalMs : 0;
+    laps.push({ splitMs: Math.max(0, total - prev), totalMs: total });
+    const snap = getSnapshot();
+    emit('cue', { kind: 'lap', phase: snap.phase });
+    emit('change', snap);
+    return snap;
+  }
+
   function configure(partial) {
     current = normalizeConfig({ ...current, ...partial });
     plan = planTimer(current);
+    laps = [];
     offsetMs = 0;
     runStartedAt = null;
     lastPhaseKey = null;
@@ -433,8 +459,14 @@ export function createIntervalTimer(config, deps = {}) {
    * Resume a persisted session without beeps. `elapsedMs` is the total elapsed
    * workout time. When `running` is true the clock continues from this instant.
    */
-  function restore({ elapsedMs = 0, running = false } = {}) {
+  function restore({ elapsedMs = 0, running = false, laps: savedLaps = [] } = {}) {
     const elapsed = Math.max(0, Number(elapsedMs) || 0);
+    laps = Array.isArray(savedLaps)
+      ? savedLaps.slice(0, 100).map((lap) => ({
+        splitMs: Math.max(0, Number(lap.splitMs) || 0),
+        totalMs: Math.max(0, Number(lap.totalMs) || 0),
+      })).filter((lap) => lap.totalMs > 0)
+      : [];
     offsetMs = elapsed;
     runStartedAt = null;
     announcedTick = null;
@@ -476,6 +508,7 @@ export function createIntervalTimer(config, deps = {}) {
     toggle,
     restart,
     skip,
+    lap,
     configure,
     restore,
     sync,

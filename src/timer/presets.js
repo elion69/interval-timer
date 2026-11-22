@@ -6,6 +6,7 @@ export const PHASES = {
   rest: { label: 'rest', color: '#1EE08A' },
   warmup: { label: 'warm', color: '#FFAA1A' },
   countdown: { label: 'timer', color: '#00B3E6' },
+  stopwatch: { label: 'stop', color: '#F4F4F5' },
   done: { label: 'done', color: '#F2F2F2' },
 };
 
@@ -54,6 +55,13 @@ export const BUILTIN_PRESETS = [
     builtin: true,
     config: { mode: 'countdown', workMs: 60_000, restMs: 0, warmupMs: 0, rounds: 1, durationMs: 300_000 },
   },
+  {
+    id: 'stopwatch',
+    name: 'Stopwatch',
+    short: 'Stop',
+    builtin: true,
+    config: { mode: 'stopwatch', workMs: 60_000, restMs: 0, warmupMs: 0, rounds: 1, durationMs: 60_000 },
+  },
 ];
 
 export function configsEqual(a, b) {
@@ -70,6 +78,7 @@ export function chipLabel(config, presets = BUILTIN_PRESETS) {
   const match = presets.find((preset) => configsEqual(preset.config, config));
   if (match) return match.short;
   if (!config) return 'Custom';
+  if (config.mode === 'stopwatch') return 'Stop';
   if (config.mode === 'countdown') return formatShort(config.durationMs);
   if (config.restMs > 0) return `${formatPart(config.workMs)}/${formatPart(config.restMs)}`;
   return formatShort(config.workMs);
