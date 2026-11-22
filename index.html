@@ -15,12 +15,49 @@
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <style>html,body{background:#000;margin:0;height:100%}</style>
+  <style>
+    html, body { background: #000; color: #fff; margin: 0; height: 100%; }
+    #boot-status {
+      min-height: 100%;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+      text-align: center;
+      font-family: Roboto, Helvetica, Arial, sans-serif;
+      font-size: 18px;
+    }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <p id="boot-status">Loading timer…</p>
+  </div>
   <script>
     (function () {
+      var HEAL_KEY = 'go-timer.sw-heal';
+
+      function heal() {
+        var jobs = [];
+        if (navigator.serviceWorker) {
+          jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+          }));
+        }
+        if (window.caches) {
+          jobs.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          }));
+        }
+        return Promise.all(jobs).catch(function () {}).then(function () {
+          var next = new URL(location.href);
+          next.searchParams.set('fresh', String(Date.now()));
+          location.replace(next.href);
+        });
+      }
+
       function show(message) {
         if (document.getElementById('boot-error')) return;
         var panel = document.createElement('div');
@@ -31,47 +68,69 @@
         title.textContent = 'The timer hit a problem and stopped drawing.';
         title.style.cssText = 'font-size:20px;line-height:1.35;margin:0;max-width:320px';
         var detail = document.createElement('p');
-        detail.textContent = message || 'Reset clears the saved timer on this phone and reloads.';
+        detail.textContent = message || 'Reset removes the stored page and loads a fresh copy.';
         detail.style.cssText = 'color:#aaa;font-size:14px;line-height:1.4;margin:0;max-width:320px';
         var button = document.createElement('button');
         button.type = 'button';
         button.textContent = 'Reset timer';
         button.style.cssText = 'background:#fff;color:#111;border:0;border-radius:999px;padding:14px 22px;font-size:16px;font-weight:700';
-        button.addEventListener('click', function () {
-          try { localStorage.clear(); } catch (err) {}
-          var pending = navigator.serviceWorker
-            ? navigator.serviceWorker.getRegistrations().then(function (regs) {
-              return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
-            })
-            : Promise.resolve();
-          Promise.resolve(pending).catch(function () {}).then(function () { location.reload(); });
-        });
-        panel.append(title, detail, button);
+        button.addEventListener('click', heal);
+        panel.appendChild(title);
+        panel.appendChild(detail);
+        panel.appendChild(button);
         document.body.appendChild(panel);
       }
+
       window.__showTimerError = show;
+      window.__timerReset = heal;
+
       window.addEventListener('error', function (event) {
         if (document.querySelector('.go-timer')) return;
-        show(event && event.message ? event.message : '');
+        show(event && event.message ? event.message : 'The timer could not load.');
       });
-      window.addEventListener('unhandledrejection', function (event) {
+
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.getRegistration().then(function (reg) {
+          if (!reg) return;
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          return reg.update();
+        }).catch(function () {});
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          setTimeout(function () {
+            if (document.querySelector('.go-timer')) return;
+            var tried = false;
+            try { tried = sessionStorage.getItem(HEAL_KEY) === '1'; } catch (err) {}
+            if (tried) return;
+            try { sessionStorage.setItem(HEAL_KEY, '1'); } catch (err) {}
+            location.reload();
+          }, 500);
+        });
+      }
+
+      setTimeout(function () {
         if (document.querySelector('.go-timer')) return;
-        var reason = event && event.reason;
-        show(reason && reason.message ? reason.message : 'Something went wrong.');
-      });
+        show('The timer did not start.');
+        var controlled = navigator.serviceWorker && navigator.serviceWorker.controller;
+        var tried = false;
+        try { tried = sessionStorage.getItem(HEAL_KEY) === '1'; } catch (err) {}
+        if (controlled && !tried) {
+          try { sessionStorage.setItem(HEAL_KEY, '1'); } catch (err) {}
+          heal();
+        }
+      }, 3000);
     })();
   </script>
   <script type="module" src="./src/main.js"></script>
   <script>
-    var moduleScript = document.querySelector('script[type="module"]');
-    if (moduleScript) {
-      moduleScript.addEventListener('error', function () {
-        window.__showTimerError('The timer could not load.');
-      });
-    }
-    setTimeout(function () {
-      if (!document.querySelector('.go-timer')) window.__showTimerError('The timer did not start.');
-    }, 4000);
+    (function () {
+      var moduleScript = document.querySelector('script[type="module"]');
+      var src = moduleScript ? moduleScript.getAttribute('src') || '' : '';
+      if (src.indexOf('/assets/') === -1 || !navigator.serviceWorker) return;
+      navigator.serviceWorker.register(new URL('sw.js', location.href).href, { updateViaCache: 'none' }).then(function (reg) {
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        return reg.update();
+      }).catch(function () {});
+    })();
   </script>
   <noscript>This timer needs JavaScript. It still runs entirely on your phone — nothing is sent anywhere.</noscript>
 </body>

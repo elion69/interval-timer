@@ -7,6 +7,8 @@ import { mountTimer } from './timer/mount.js';
 
 try {
   mountTimer(document.getElementById('app'));
+  document.getElementById('boot-error')?.remove();
+  try { sessionStorage.removeItem('go-timer.sw-heal'); } catch { /* private mode */ }
 } catch (err) {
   window.__showTimerError?.(err?.message || 'The timer could not start.');
 }
