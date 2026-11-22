@@ -1,6 +1,6 @@
 {
-  "id": "2026-11-22T143549733Z-14518",
-  "issued": "2026-11-22T14:35:49.733Z",
-  "action": "start",
-  "workout": "20 on / 5 off"
+  "id": "idle-hold",
+  "issued": "2020-01-01T00:00:00Z",
+  "action": "pause",
+  "workout": null
 }
