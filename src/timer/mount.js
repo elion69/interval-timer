@@ -70,6 +70,7 @@ export function mountTimer(container, options = {}) {
       <header class="go-top">
         <div class="go-brand">
           <button type="button" class="go-chip" data-testid="preset-chip">1M</button>
+          <button type="button" class="go-presets-btn" data-testid="presets-button">Presets</button>
           <button type="button" class="go-iconbtn go-add" data-testid="add" aria-label="Add another timer">${ICON.plus}</button>
         </div>
         <div class="go-actions">
@@ -120,6 +121,7 @@ export function mountTimer(container, options = {}) {
             <button type="button" data-mode="interval" aria-pressed="true">Intervals</button>
             <button type="button" data-mode="stopwatch" aria-pressed="false">Stopwatch</button>
           </div>
+          <button type="button" class="go-presets-btn go-presets-btn-block" data-testid="presets-button-setup">Presets</button>
           <p class="go-warn" data-warn hidden>This restarts the timer on screen. Any others keep running.</p>
           <p class="go-note" data-add-note hidden>It starts right away, alongside whatever is already running, and uses a different beep.</p>
           <div data-panel="countdown">
@@ -190,6 +192,17 @@ export function mountTimer(container, options = {}) {
           <button type="button" class="go-remove" data-testid="remove-timer" hidden>Remove this timer</button>
           <div class="go-done-wrap">
             <button type="button" class="go-done" data-testid="done">Done</button>
+          </div>
+        </div>
+      </div>
+      <div class="go-backdrop go-preset-backdrop" data-testid="preset-backdrop">
+        <div class="go-sheet" role="dialog" aria-modal="true" aria-label="Presets" tabindex="-1" data-testid="preset-sheet">
+          <div class="go-handle"></div>
+          <h2>Presets</h2>
+          <p class="go-note">One tap loads it on the timer in front. 20/5 is 20:00 on and 5:00 off, four rounds.</p>
+          <div class="go-preset-list" data-testid="preset-list"></div>
+          <div class="go-done-wrap">
+            <button type="button" class="go-done" data-testid="preset-close">Close</button>
           </div>
         </div>
       </div>
@@ -661,6 +674,62 @@ export function mountTimer(container, options = {}) {
     }
   }
 
+  function presetDetail(config) {
+    if (config.mode === 'stopwatch') return 'Counts up, with laps';
+    if (config.mode === 'countdown') return `${formatPhase(config.durationMs)} countdown`;
+    const rest = config.restMs > 0 ? `${formatPhase(config.restMs)} off` : 'no rest';
+    const rounds = config.rounds == null ? 'unlimited' : `${config.rounds} rounds`;
+    return `${formatPhase(config.workMs)} on · ${rest} · ${rounds}`;
+  }
+
+  const presetBackdrop = q('[data-testid="preset-backdrop"]');
+  const presetSheet = q('[data-testid="preset-sheet"]');
+  const presetList = q('[data-testid="preset-list"]');
+
+  function paintPresetList() {
+    const current = backdrop.classList.contains('is-open') ? draft : focusedTimer().getSnapshot().config;
+    presetList.replaceChildren();
+    for (const preset of presets()) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'go-preset-row';
+      row.dataset.testid = 'preset-row';
+      row.setAttribute('data-testid', 'preset-row');
+      row.setAttribute('aria-pressed', String(configsEqual(preset.config, current)));
+      row.innerHTML = `<span class="go-preset-row-name"></span><span class="go-preset-row-detail"></span>`;
+      row.querySelector('.go-preset-row-name').textContent = preset.name;
+      row.querySelector('.go-preset-row-detail').textContent = presetDetail(preset.config);
+      row.addEventListener('click', () => applyPreset(preset));
+      presetList.appendChild(row);
+    }
+  }
+
+  function openPresetList() {
+    paintPresetList();
+    presetBackdrop.classList.add('is-open');
+    presetBackdrop.inert = false;
+    presetSheet.focus();
+  }
+
+  function closePresetList() {
+    presetBackdrop.classList.remove('is-open');
+    presetBackdrop.inert = true;
+  }
+
+  function applyPreset(preset) {
+    draft = cloneConfig(preset.config);
+    if (backdrop.classList.contains('is-open')) {
+      onEdit();
+      closePresetList();
+      return;
+    }
+    const session = rack.focused();
+    session.timer.configure(draft);
+    rack.setLabel(session.id, preset.short);
+    closePresetList();
+    showToast(`${preset.short} ready`);
+  }
+
   function paintPresets() {
     presetBox.replaceChildren();
     for (const preset of presets()) {
@@ -786,7 +855,7 @@ export function mountTimer(container, options = {}) {
     if (current.mode === 'interval') {
       return { mode: 'countdown', durationMs: 5 * 60_000, workMs: 60_000, restMs: 0, warmupMs: 0, rounds: 1 };
     }
-    return { mode: 'interval', workMs: 20 * 60_000, restMs: 5 * 60_000, warmupMs: 0, rounds: 1, durationMs: 20 * 60_000 };
+    return { mode: 'interval', workMs: 20 * 60_000, restMs: 5 * 60_000, warmupMs: 0, rounds: 4, durationMs: 20 * 60_000 };
   }
 
   function openAdd() {
@@ -907,8 +976,16 @@ export function mountTimer(container, options = {}) {
     kick();
   }
   backdrop.inert = true;
+  presetBackdrop.inert = true;
 
   chipBtn.addEventListener('click', openSheet);
+  q('[data-testid="presets-button"]').addEventListener('click', openPresetList);
+  q('[data-testid="presets-button-setup"]').addEventListener('click', openPresetList);
+  q('[data-testid="preset-close"]').addEventListener('click', closePresetList);
+  presetBackdrop.addEventListener('click', (event) => {
+    if (event.target === presetBackdrop) closePresetList();
+  });
+  presetSheet.addEventListener('click', (event) => event.stopPropagation());
   settingsBtn.addEventListener('click', openSheet);
   q('[data-testid="add"]').addEventListener('click', openAdd);
   soundBtn.addEventListener('click', () => {
@@ -1082,6 +1159,10 @@ export function mountTimer(container, options = {}) {
         event.preventDefault();
         closeKeypad();
       }
+      return;
+    }
+    if (event.key === 'Escape' && presetBackdrop.classList.contains('is-open')) {
+      closePresetList();
       return;
     }
     if (event.key === 'Escape' && backdrop.classList.contains('is-open')) {

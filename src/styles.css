@@ -63,12 +63,53 @@ button, input { font-family: inherit; }
   border-radius: 12px;
 }
 
-.go-brand { display: flex; align-items: center; gap: 2px; }
+.go-brand { display: flex; align-items: center; gap: 2px; min-width: 0; }
+
+.go-presets-btn {
+  border: 1px solid var(--chip);
+  background: #06252c;
+  color: var(--chip);
+  font-size: 15px;
+  font-weight: 500;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  flex: none;
+}
+.go-presets-btn-block {
+  width: 100%;
+  height: 48px;
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.go-preset-backdrop { z-index: 30; }
+.go-preset-list { display: flex; flex-direction: column; gap: 8px; }
+.go-preset-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #2a2a2a;
+  background: #161616;
+  color: #fff;
+  text-align: left;
+}
+.go-preset-row[aria-pressed="true"] {
+  border-color: var(--chip);
+  background: #06252c;
+}
+.go-preset-row-name { font-size: 17px; font-weight: 500; }
+.go-preset-row-detail { color: #aaa; font-size: 14px; }
 .go-actions { display: flex; align-items: center; }
 
 .go-iconbtn {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border: 0;
   border-radius: 50%;
   background: transparent;

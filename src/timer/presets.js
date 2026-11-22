@@ -50,10 +50,17 @@ export const BUILTIN_PRESETS = [
   },
   {
     id: '5min',
-    name: '5 min',
-    short: '5M',
+    name: '5:00',
+    short: '5:00',
     builtin: true,
     config: { mode: 'countdown', workMs: 60_000, restMs: 0, warmupMs: 0, rounds: 1, durationMs: 300_000 },
+  },
+  {
+    id: '20-5',
+    name: '20 on / 5 off',
+    short: '20/5',
+    builtin: true,
+    config: { mode: 'interval', workMs: 1_200_000, restMs: 300_000, warmupMs: 0, rounds: 4, durationMs: 1_200_000 },
   },
   {
     id: 'stopwatch',

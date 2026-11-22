@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createIntervalTimer, planTimer } from '../src/timer/engine.js';
 import { digitsToMs, formatHMS, formatPhase, formatStopwatch } from '../src/timer/format.js';
-import { chipLabel, configsEqual } from '../src/timer/presets.js';
+import { BUILTIN_PRESETS, chipLabel, configsEqual } from '../src/timer/presets.js';
 
 function harness(config) {
   let now = 1_000_000;
@@ -275,6 +275,16 @@ test('digits fill from the right, so 2000 is 20:00', () => {
   assert.equal(digitsToMs('').text, '00:00');
   assert.equal(digitsToMs('20000').text, '2:00:00');
   assert.equal(formatStopwatch(12_480), '00:12.48');
+});
+
+test('20 on / 5 off is a one-tap preset and keeps the rest rounds', () => {
+  const preset = BUILTIN_PRESETS.find((item) => item.id === '20-5');
+  assert.equal(chipLabel(preset.config), '20/5');
+  assert.equal(preset.config.workMs, 20 * 60_000);
+  assert.equal(preset.config.restMs, 5 * 60_000);
+  assert.equal(preset.config.rounds, 4);
+  const plan = planTimer(preset.config);
+  assert.ok(plan.phases.some((phase) => phase.type === 'rest'));
 });
 
 test('chip labels prefer a saved preset name', () => {
