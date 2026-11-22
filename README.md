@@ -20,7 +20,21 @@ Tap a time (work, rest, warm-up, or countdown) and type it. Digits fill from the
 
 https://elion69.github.io/interval-timer/
 
-Pushing `main` to `github.com/elion69/interval-timer` runs the Pages workflow and republishes that same URL.
+Pushing `main` to `github.com/elion69/interval-timer` runs the Pages workflow and republishes that same URL. Updates that only change `remote/command.json` do not rebuild the site.
+
+## Remote start
+
+While the page is open it checks a public command file about every 5 seconds. A command runs once and is ignored if it is more than 2 minutes old. The timer still works with no connection.
+
+From a machine logged into GitHub as someone who can push to the repo:
+
+```bash
+scripts/send-command.sh start "20 on / 5 off"
+scripts/send-command.sh pause
+scripts/send-command.sh stop
+```
+
+Or reply to the agent: `start 20 on / 5 off`.
 
 ## Run it
 

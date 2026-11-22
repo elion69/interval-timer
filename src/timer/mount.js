@@ -5,6 +5,7 @@ import { createWakeLock } from './wake.js';
 import { loadState, normalizeSaved, saveState } from './storage.js';
 import { BUILTIN_PRESETS, chipLabel, configsEqual } from './presets.js';
 import { digitsToMs, formatElapsedHMS, formatHMS, formatPart, formatPhase, formatStopwatch, msToDigits } from './format.js';
+import { startRemoteCommands } from './remote.js';
 
 const CX = 170;
 const ARC_R = 143;
@@ -1373,11 +1374,40 @@ export function mountTimer(container, options = {}) {
     if (rack.anyRunning()) wake.setActive(true);
   }
 
+  const remote = startRemoteCommands({
+    workouts: () => presets(),
+    onCommand(decision) {
+      const session = rack.focused();
+      if (decision.action === 'missing') {
+        showToast(`Captain: no workout named “${decision.label}”`);
+        return;
+      }
+      if (decision.action === 'pause') {
+        session.timer.pause();
+        showToast('Paused by Captain');
+        return;
+      }
+      if (decision.action === 'stop') {
+        session.timer.configure(session.timer.getSnapshot().config);
+        showToast('Stopped by Captain');
+        return;
+      }
+      if (decision.config) {
+        session.timer.configure(decision.config);
+        rack.setLabel(session.id, decision.label);
+      }
+      alerts.unlock();
+      session.timer.start();
+      showToast(`Started by Captain: ${decision.label}`);
+    },
+  });
+
   function destroy() {
     if (raf) cancelAnimationFrame(raf);
     document.removeEventListener('keydown', onKey);
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('pagehide', persist);
+    remote.stop();
     wake.destroy();
     alerts.close();
     rack.destroy();
