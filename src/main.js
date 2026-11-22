@@ -5,7 +5,11 @@ import '@fontsource/roboto/latin-700.css';
 import './styles.css';
 import { mountTimer } from './timer/mount.js';
 
-mountTimer(document.getElementById('app'));
+try {
+  mountTimer(document.getElementById('app'));
+} catch (err) {
+  window.__showTimerError?.(err?.message || 'The timer could not start.');
+}
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

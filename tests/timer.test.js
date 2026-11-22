@@ -104,6 +104,27 @@ test('phases advance from the timestamp and skip trailing rest', () => {
   timer.destroy();
 });
 
+test('a hidden gap across 5:00 rounds with no rest lands on the next round', () => {
+  const { timer, advance, phases, cues } = harness({
+    mode: 'interval', workMs: 300_000, restMs: 0, warmupMs: 0, rounds: 10,
+  });
+  timer.start();
+  advance(6 * 60_000);
+  const snap = timer.getSnapshot();
+  assert.equal(snap.status, 'running');
+  assert.equal(snap.phase.type, 'work');
+  assert.equal(snap.phase.round, 2);
+  assert.equal(snap.phase.remainingMs, 4 * 60_000);
+  assert.equal(snap.totalRemainingMs, 50 * 60_000 - 6 * 60_000);
+  assert.equal(snap.roundsRemaining, 9);
+  assert.deepEqual(phases, ['work:1', 'work:2']);
+  assert.deepEqual(cues, ['phase:work:1', 'phase:work:2']);
+  advance(50 * 60_000);
+  assert.equal(timer.getSnapshot().status, 'complete');
+  assert.equal(cues.at(-1), 'complete');
+  timer.destroy();
+});
+
 test('zero rest never inserts a rest phase', () => {
   const { timer, advance, phases } = harness({
     mode: 'interval', workMs: 1_000, restMs: 0, warmupMs: 0, rounds: 3,

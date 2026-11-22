@@ -1106,8 +1106,14 @@ export function mountTimer(container, options = {}) {
   rack.on('roster', onRackChange);
 
   function frame() {
-    rack.sync();
-    render();
+    try {
+      rack.sync();
+      render();
+    } catch (err) {
+      raf = 0;
+      window.__showTimerError?.(err?.message || 'The timer could not draw.');
+      return;
+    }
     raf = rack.anyRunning() ? requestAnimationFrame(frame) : 0;
   }
 
@@ -1368,8 +1374,13 @@ export function mountTimer(container, options = {}) {
       raf = 0;
       return;
     }
-    rack.sync();
-    render();
+    try {
+      rack.sync();
+      render();
+    } catch (err) {
+      window.__showTimerError?.(err?.message || 'The timer could not draw.');
+      return;
+    }
     kick();
     if (rack.anyRunning()) wake.setActive(true);
   }
@@ -1378,27 +1389,36 @@ export function mountTimer(container, options = {}) {
     workouts: () => presets(),
     onCommand(decision) {
       const session = rack.focused();
-      if (decision.action === 'missing') {
-        showToast(`Captain: no workout named “${decision.label}”`);
-        return;
+      if (!session) return;
+      try {
+        if (decision.action === 'missing') {
+          showToast(`Captain: no workout named “${decision.label}”`);
+          return;
+        }
+        if (decision.action === 'pause') {
+          session.timer.pause();
+          showToast('Paused by Captain');
+          return;
+        }
+        if (decision.action === 'stop') {
+          session.timer.configure(session.timer.getSnapshot().config);
+          showToast('Stopped by Captain');
+          return;
+        }
+        if (decision.config) {
+          session.timer.configure(decision.config);
+          rack.setLabel(session.id, decision.label);
+        }
+        try {
+          alerts.unlock();
+        } catch {
+          /* A background tab can refuse audio until the next tap. */
+        }
+        session.timer.start();
+        showToast(`Started by Captain: ${decision.label}`);
+      } catch (err) {
+        window.__showTimerError?.(err?.message || 'A remote start could not run.');
       }
-      if (decision.action === 'pause') {
-        session.timer.pause();
-        showToast('Paused by Captain');
-        return;
-      }
-      if (decision.action === 'stop') {
-        session.timer.configure(session.timer.getSnapshot().config);
-        showToast('Stopped by Captain');
-        return;
-      }
-      if (decision.config) {
-        session.timer.configure(decision.config);
-        rack.setLabel(session.id, decision.label);
-      }
-      alerts.unlock();
-      session.timer.start();
-      showToast(`Started by Captain: ${decision.label}`);
     },
   });
 

@@ -19,7 +19,60 @@
 </head>
 <body>
   <div id="app"></div>
+  <script>
+    (function () {
+      function show(message) {
+        if (document.getElementById('boot-error')) return;
+        var panel = document.createElement('div');
+        panel.id = 'boot-error';
+        panel.setAttribute('role', 'alert');
+        panel.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center;font-family:Roboto,Helvetica,Arial,sans-serif';
+        var title = document.createElement('p');
+        title.textContent = 'The timer hit a problem and stopped drawing.';
+        title.style.cssText = 'font-size:20px;line-height:1.35;margin:0;max-width:320px';
+        var detail = document.createElement('p');
+        detail.textContent = message || 'Reset clears the saved timer on this phone and reloads.';
+        detail.style.cssText = 'color:#aaa;font-size:14px;line-height:1.4;margin:0;max-width:320px';
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Reset timer';
+        button.style.cssText = 'background:#fff;color:#111;border:0;border-radius:999px;padding:14px 22px;font-size:16px;font-weight:700';
+        button.addEventListener('click', function () {
+          try { localStorage.clear(); } catch (err) {}
+          var pending = navigator.serviceWorker
+            ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+            })
+            : Promise.resolve();
+          Promise.resolve(pending).catch(function () {}).then(function () { location.reload(); });
+        });
+        panel.append(title, detail, button);
+        document.body.appendChild(panel);
+      }
+      window.__showTimerError = show;
+      window.addEventListener('error', function (event) {
+        if (document.querySelector('.go-timer')) return;
+        show(event && event.message ? event.message : '');
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        if (document.querySelector('.go-timer')) return;
+        var reason = event && event.reason;
+        show(reason && reason.message ? reason.message : 'Something went wrong.');
+      });
+    })();
+  </script>
   <script type="module" src="./src/main.js"></script>
+  <script>
+    var moduleScript = document.querySelector('script[type="module"]');
+    if (moduleScript) {
+      moduleScript.addEventListener('error', function () {
+        window.__showTimerError('The timer could not load.');
+      });
+    }
+    setTimeout(function () {
+      if (!document.querySelector('.go-timer')) window.__showTimerError('The timer did not start.');
+    }, 4000);
+  </script>
   <noscript>This timer needs JavaScript. It still runs entirely on your phone — nothing is sent anywhere.</noscript>
 </body>
 </html>

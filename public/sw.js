@@ -1,4 +1,4 @@
-const CACHE = 'interval-timer-v8';
+const CACHE = 'interval-timer-v9';
 const scopeURL = new URL('./', self.location);
 const scoped = (path) => new URL(path, scopeURL).href;
 const SHELL = [
@@ -33,17 +33,30 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  // Chrome asks a waking tab for these. fetch() throws, and answering with the
+  // HTML shell makes the script fail and leaves a blank black page.
+  if (req.cache === 'only-if-cached' && req.mode !== 'same-origin') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(req, copy));
-        }
-        return res;
-      })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match(scoped('index.html')))),
-  );
+  const documentRequest = req.mode === 'navigate' || req.destination === 'document';
+  event.respondWith((async () => {
+    try {
+      const res = await fetch(req);
+      if (res && res.ok && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
+      }
+      return res;
+    } catch {
+      // Pages marks files with Vary: Accept-Encoding. A strict match misses on
+      // resume, and the old fallback then served this HTML page as the script.
+      const cached = await caches.match(req, { ignoreVary: true });
+      if (cached) return cached;
+      if (documentRequest) {
+        const shell = await caches.match(scoped('index.html'), { ignoreVary: true });
+        if (shell) return shell;
+      }
+      return Response.error();
+    }
+  })());
 });
