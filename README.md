@@ -16,6 +16,12 @@ The **+** button starts another timer without stopping the one on screen. The bi
 
 Tap a time (work, rest, warm-up, or countdown) and type it. Digits fill from the right, so `2000` is 20:00. The 20:00 and 5:00 chips are still there.
 
+## Live site
+
+https://elion69.github.io/interval-timer/
+
+Pushing `main` to `github.com/elion69/interval-timer` runs the Pages workflow and republishes that same URL.
+
 ## Run it
 
 ```bash
