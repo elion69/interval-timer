@@ -1,13 +1,15 @@
-const CACHE = 'interval-timer-v3';
+const CACHE = 'interval-timer-v4';
+const scopeURL = new URL('./', self.location);
+const scoped = (path) => new URL(path, scopeURL).href;
 const SHELL = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/favicon.svg',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon-maskable-512.png',
-  '/icons/apple-touch-icon.png',
+  scopeURL.href,
+  scoped('index.html'),
+  scoped('manifest.webmanifest'),
+  scoped('favicon.svg'),
+  scoped('icons/icon-192.png'),
+  scoped('icons/icon-512.png'),
+  scoped('icons/icon-maskable-512.png'),
+  scoped('icons/apple-touch-icon.png'),
 ];
 
 self.addEventListener('install', (event) => {
@@ -42,6 +44,6 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match('/index.html'))),
+      .catch(() => caches.match(req).then((cached) => cached || caches.match(scoped('index.html')))),
   );
 });

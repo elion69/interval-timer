@@ -1,10 +1,10 @@
 {
-  "id": "/",
+  "id": "./",
   "name": "Interval Timer",
   "short_name": "Interval",
-  "description": "Phone interval timer with work, rest, rounds, and a plain countdown. Offline, no account.",
-  "start_url": "/",
-  "scope": "/",
+  "description": "Phone interval timer with work, rest, rounds, a stopwatch, and laps. Offline, no account.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
@@ -12,8 +12,8 @@
   "theme_color": "#000000",
   "categories": ["health", "sports", "lifestyle"],
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

@@ -9,12 +9,14 @@ mountTimer(document.getElementById('app'));
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
+    const swUrl = new URL('sw.js', window.location.href);
+    const scope = new URL('./', window.location.href).pathname;
+    navigator.serviceWorker.register(swUrl, { scope, updateViaCache: 'none' }).then((reg) => {
       const send = () => {
         const urls = performance.getEntriesByType('resource')
           .map((entry) => entry.name)
           .filter((name) => name.startsWith(location.origin));
-        reg.active?.postMessage({ type: 'cache', urls: [location.origin + '/', ...urls] });
+        reg.active?.postMessage({ type: 'cache', urls: [new URL('./', location.href).href, ...urls] });
       };
       if (navigator.serviceWorker.controller) send();
       else navigator.serviceWorker.addEventListener('controllerchange', send, { once: true });
