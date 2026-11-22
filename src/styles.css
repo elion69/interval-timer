@@ -105,6 +105,112 @@ button, input { font-family: inherit; }
 }
 .go-preset-row-name { font-size: 17px; font-weight: 500; }
 .go-preset-row-detail { color: #aaa; font-size: 14px; }
+
+.go-workouts {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: #000;
+  display: flex;
+  justify-content: center;
+}
+.go-workouts[hidden] { display: none; }
+.go-workouts-panel {
+  position: relative;
+  width: min(100%, 520px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+.go-workouts-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: max(8px, env(safe-area-inset-top)) 8px 4px;
+}
+.go-workouts-top h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+.go-workout-list {
+  flex: 1;
+  overflow: auto;
+  padding: 0 8px 96px;
+}
+.go-workout {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 44px 44px;
+  align-items: center;
+  min-height: 72px;
+  border-bottom: 1px solid #161616;
+}
+.go-workout-play {
+  width: 42px;
+  height: 42px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: #3cdbff;
+  color: #042028;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.go-workout-play svg { width: 18px; height: 18px; margin-left: 2px; }
+.go-workout-copy { min-width: 0; text-align: left; }
+.go-workout-name {
+  color: #3cdbff;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.go-workout-time {
+  color: #8d8d8d;
+  font-size: 14px;
+  margin-top: 2px;
+}
+.go-fab {
+  position: absolute;
+  right: 18px;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: #3cdbff;
+  color: #042028;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.go-fab svg { width: 28px; height: 28px; }
+.go-mini-menu {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: max(92px, calc(env(safe-area-inset-bottom) + 84px));
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  overflow: hidden;
+  z-index: 2;
+}
+.go-mini-menu[hidden] { display: none; }
+.go-mini-menu button {
+  display: block;
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-bottom: 1px solid #2a2a2a;
+  background: transparent;
+  color: #fff;
+  font-size: 16px;
+}
+.go-mini-menu button:last-child { border-bottom: 0; }
+.go-mini-menu button[hidden] { display: none; }
 .go-actions { display: flex; align-items: center; }
 
 .go-iconbtn {

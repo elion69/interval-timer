@@ -27,6 +27,9 @@ const ICON = {
   stopwatch: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 13V9.2M9.2 3.2h5.6M12 3.2v2.2"/></svg>`,
   lap: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 4v16M6 5h10l-2.2 3.2L16 11.5H6"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  clipboard: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 3.2h6v2.4H9z" fill="currentColor"/><circle cx="12" cy="13.2" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12 11.8V13.2l1.3.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  back: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  pencil: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.1-1.1L19.2 7.8 16.2 4.8 5.1 15.9 4 20z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13.8 7.2l3 3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
 };
 
@@ -75,7 +78,7 @@ export function mountTimer(container, options = {}) {
         </div>
         <div class="go-actions">
           <button type="button" class="go-iconbtn" data-testid="sound" aria-pressed="true" aria-label="Mute sound"></button>
-          <button type="button" class="go-iconbtn" data-testid="wake" aria-label="Screen stays awake while running"></button>
+          <button type="button" class="go-iconbtn" data-testid="workouts" aria-label="Workouts">${ICON.clipboard}</button>
           <button type="button" class="go-iconbtn" data-testid="settings" aria-label="Settings"></button>
         </div>
       </header>
@@ -206,6 +209,21 @@ export function mountTimer(container, options = {}) {
           </div>
         </div>
       </div>
+      <div class="go-workouts" data-testid="workouts-screen" hidden>
+        <div class="go-workouts-panel">
+          <header class="go-workouts-top">
+            <button type="button" class="go-iconbtn" data-testid="workouts-back" aria-label="Back">${ICON.back}</button>
+            <h1>Workouts</h1>
+          </header>
+          <div class="go-workout-list" data-testid="workout-list"></div>
+          <button type="button" class="go-fab" data-testid="workout-add" aria-label="New workout">${ICON.plus}</button>
+          <div class="go-mini-menu" data-testid="workout-menu" hidden>
+            <button type="button" data-act="duplicate">Duplicate</button>
+            <button type="button" data-act="delete">Delete</button>
+            <button type="button" data-act="cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
       <div class="go-keypad" data-testid="keypad" hidden>
         <p class="go-keypad-label" data-testid="keypad-label">Work</p>
         <div class="go-keypad-display" data-testid="keypad-display">00:00</div>
@@ -234,7 +252,6 @@ export function mountTimer(container, options = {}) {
   const q = (sel) => shell.querySelector(sel);
   const chipBtn = q('[data-testid="preset-chip"]');
   const soundBtn = q('[data-testid="sound"]');
-  const wakeBtn = q('[data-testid="wake"]');
   const settingsBtn = q('[data-testid="settings"]');
   const totalEl = q('[data-testid="total"]');
   const captionEl = q('[data-testid="caption"]');
@@ -315,8 +332,6 @@ export function mountTimer(container, options = {}) {
     wakeOn = on;
     paintWake();
   });
-  if (!wake.supported) wakeBtn.dataset.awake = 'unsupported';
-  wakeBtn.innerHTML = ICON.wake;
   settingsBtn.innerHTML = ICON.menu;
 
   const rack = createTimerRack(options.clock || {});
@@ -368,11 +383,7 @@ export function mountTimer(container, options = {}) {
   }
 
   function paintWake() {
-    if (!wake.supported) {
-      wakeBtn.dataset.awake = 'unsupported';
-      return;
-    }
-    wakeBtn.dataset.awake = wakeOn && rack.anyRunning() ? 'on' : 'off';
+    /* The screen stays awake while any timer runs. The top bar no longer shows a separate icon. */
   }
 
   function announce(snap) {
@@ -877,7 +888,160 @@ export function mountTimer(container, options = {}) {
     sheet.focus();
   }
 
+  const workoutsEl = q('[data-testid="workouts-screen"]');
+  const workoutList = q('[data-testid="workout-list"]');
+  const workoutMenu = q('[data-testid="workout-menu"]');
+  let menuPreset = null;
+  let editingWorkoutId = null;
+
+  function workoutDuration(config) {
+    if (config.mode === 'stopwatch') return 'Counts up';
+    const plan = planTimer(config);
+    if (!plan.limited) return 'Unlimited';
+    return formatHMS(plan.totalMs);
+  }
+
+  function paintWorkouts() {
+    workoutList.replaceChildren();
+    for (const preset of presets()) {
+      const row = document.createElement('div');
+      row.className = 'go-workout';
+      row.innerHTML = `
+        <button type="button" class="go-workout-play" data-act="play" aria-label="Start ${preset.name}">${ICON.play}</button>
+        <div class="go-workout-copy">
+          <div class="go-workout-name"></div>
+          <div class="go-workout-time"></div>
+        </div>
+        <button type="button" class="go-iconbtn" data-act="edit" aria-label="Edit ${preset.name}">${ICON.pencil}</button>
+        <button type="button" class="go-iconbtn" data-act="more" aria-label="More ${preset.name}">${ICON.menu}</button>
+      `;
+      row.querySelector('.go-workout-name').textContent = preset.name;
+      row.querySelector('.go-workout-time').textContent = workoutDuration(preset.config);
+      row.querySelector('[data-act="play"]').addEventListener('click', () => playWorkout(preset));
+      row.querySelector('[data-act="edit"]').addEventListener('click', () => editWorkout(preset));
+      row.querySelector('[data-act="more"]').addEventListener('click', () => openWorkoutMenu(preset));
+      workoutList.appendChild(row);
+    }
+  }
+
+  function openWorkouts() {
+    closeWorkoutMenu();
+    paintWorkouts();
+    workoutsEl.hidden = false;
+  }
+
+  function closeWorkouts() {
+    closeWorkoutMenu();
+    workoutsEl.hidden = true;
+  }
+
+  function playWorkout(preset) {
+    alerts.unlock();
+    const session = rack.focused();
+    session.timer.configure(cloneConfig(preset.config));
+    rack.setLabel(session.id, preset.short);
+    session.timer.start();
+    closeWorkouts();
+  }
+
+  function editWorkout(preset) {
+    editingWorkoutId = preset.builtin ? null : preset.id;
+    intent = preset.builtin ? 'save-copy' : 'save-edit';
+    draft = cloneConfig(preset.config);
+    dirty = true;
+    warn.hidden = true;
+    addNote.hidden = true;
+    removeBtn.hidden = true;
+    nameInput.value = preset.name;
+    paintPresets();
+    sheetTitle.textContent = 'Edit workout';
+    doneBtn.textContent = 'Save';
+    closeWorkouts();
+    setSheet(true);
+    sheet.focus();
+  }
+
+  function newWorkout() {
+    editingWorkoutId = null;
+    intent = 'save-new';
+    draft = { mode: 'interval', workMs: 60_000, restMs: 0, warmupMs: 0, rounds: 1, durationMs: 60_000 };
+    dirty = true;
+    warn.hidden = true;
+    addNote.hidden = true;
+    removeBtn.hidden = true;
+    nameInput.value = '';
+    paintPresets();
+    sheetTitle.textContent = 'New workout';
+    doneBtn.textContent = 'Save';
+    closeWorkouts();
+    setSheet(true);
+    sheet.focus();
+  }
+
+  function saveWorkoutFromDraft() {
+    const name = nameInput.value.trim().slice(0, 24) || chipLabel(draft, presets());
+    const record = {
+      id: intent === 'save-edit' && editingWorkoutId ? editingWorkoutId : `custom-${Date.now()}`,
+      name,
+      short: name.slice(0, 12),
+      builtin: false,
+      config: cloneConfig(draft),
+    };
+    if (intent === 'save-edit' && editingWorkoutId) {
+      customPresets = customPresets.map((item) => (item.id === editingWorkoutId ? record : item));
+    } else {
+      customPresets = [...customPresets, record].slice(-24);
+    }
+    nameInput.value = '';
+    editingWorkoutId = null;
+    persist();
+    showToast(`Saved “${name}”`);
+  }
+
+  function duplicateWorkout(preset) {
+    const name = `${preset.name} copy`.slice(0, 24);
+    customPresets = [...customPresets, {
+      id: `custom-${Date.now()}`,
+      name,
+      short: name.slice(0, 12),
+      builtin: false,
+      config: cloneConfig(preset.config),
+    }].slice(-24);
+    persist();
+    paintWorkouts();
+    showToast('Duplicated');
+  }
+
+  function deleteWorkout(preset) {
+    if (preset.builtin) {
+      showToast('Built-in workouts stay in the list');
+      return;
+    }
+    customPresets = customPresets.filter((item) => item.id !== preset.id);
+    persist();
+    paintWorkouts();
+  }
+
+  function openWorkoutMenu(preset) {
+    menuPreset = preset;
+    workoutMenu.querySelector('[data-act="delete"]').hidden = !!preset.builtin;
+    workoutMenu.hidden = false;
+  }
+
+  function closeWorkoutMenu() {
+    menuPreset = null;
+    workoutMenu.hidden = true;
+  }
+
   function closeSheet(commit) {
+    const savingWorkout = intent === 'save-edit' || intent === 'save-copy' || intent === 'save-new';
+    if (savingWorkout) {
+      if (commit) saveWorkoutFromDraft();
+      intent = 'edit';
+      setSheet(false);
+      openWorkouts();
+      return;
+    }
     if (intent === 'add') {
       if (commit) {
         const alongside = rack.anyRunning();
@@ -906,7 +1070,7 @@ export function mountTimer(container, options = {}) {
     customPresets = [
       ...customPresets,
       { id: `custom-${Date.now()}`, name, short: short.slice(0, 12), builtin: false, config: cloneConfig(draft) },
-    ].slice(-6);
+    ].slice(-24);
     nameInput.value = '';
     paintPresets();
     persist();
@@ -994,10 +1158,6 @@ export function mountTimer(container, options = {}) {
     paintSound();
     persist();
   });
-  wakeBtn.addEventListener('click', () => {
-    if (!wake.supported) showToast('This browser can’t keep the screen awake');
-    else showToast('The screen stays on while the timer is running');
-  });
   center.addEventListener('click', userToggle);
   toggleBtn.addEventListener('click', userToggle);
   restartBtn.addEventListener('click', () => {
@@ -1063,7 +1223,20 @@ export function mountTimer(container, options = {}) {
     setSheet(false);
   });
   backdrop.addEventListener('click', (event) => {
-    if (event.target === backdrop) closeSheet(intent !== 'add');
+    if (event.target !== backdrop) return;
+    const saving = intent === 'save-edit' || intent === 'save-copy' || intent === 'save-new';
+    closeSheet(saving ? false : intent !== 'add');
+  });
+  q('[data-testid="workouts"]').addEventListener('click', openWorkouts);
+  q('[data-testid="workouts-back"]').addEventListener('click', closeWorkouts);
+  q('[data-testid="workout-add"]').addEventListener('click', newWorkout);
+  workoutMenu.addEventListener('click', (event) => {
+    const act = event.target.closest('[data-act]')?.dataset.act;
+    const preset = menuPreset;
+    closeWorkoutMenu();
+    if (!preset || act === 'cancel') return;
+    if (act === 'duplicate') duplicateWorkout(preset);
+    if (act === 'delete') deleteWorkout(preset);
   });
   sheet.addEventListener('click', (event) => event.stopPropagation());
 
@@ -1159,6 +1332,11 @@ export function mountTimer(container, options = {}) {
         event.preventDefault();
         closeKeypad();
       }
+      return;
+    }
+    if (event.key === 'Escape' && !workoutsEl.hidden) {
+      if (!workoutMenu.hidden) closeWorkoutMenu();
+      else closeWorkouts();
       return;
     }
     if (event.key === 'Escape' && presetBackdrop.classList.contains('is-open')) {

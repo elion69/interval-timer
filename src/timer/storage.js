@@ -41,7 +41,7 @@ function cleanTimer(timer, index) {
 
 export function normalizeSaved(data) {
   const customPresets = Array.isArray(data?.customPresets)
-    ? data.customPresets.map(cleanPreset).filter(Boolean).slice(0, 6)
+    ? data.customPresets.map(cleanPreset).filter(Boolean).slice(0, 24)
     : [];
   let timers = Array.isArray(data?.timers)
     ? data.timers.map(cleanTimer).filter(Boolean).slice(0, 6)
