@@ -56,6 +56,13 @@ export const BUILTIN_PRESETS = [
     config: { mode: 'countdown', workMs: 60_000, restMs: 0, warmupMs: 0, rounds: 1, durationMs: 300_000 },
   },
   {
+    id: '5x10',
+    name: '5:00 x 10',
+    short: '5x10',
+    builtin: true,
+    config: { mode: 'interval', workMs: 300_000, restMs: 0, warmupMs: 0, rounds: 10, durationMs: 300_000 },
+  },
+  {
     id: '20-5',
     name: '20 on / 5 off',
     short: '20/5',

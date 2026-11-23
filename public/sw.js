@@ -1,4 +1,4 @@
-const CACHE = 'interval-timer-v10';
+const CACHE = 'interval-timer-v11';
 const scopeURL = new URL('./', self.location);
 const scoped = (path) => new URL(path, scopeURL).href;
 const SHELL = [

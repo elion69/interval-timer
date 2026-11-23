@@ -298,6 +298,20 @@ test('digits fill from the right, so 2000 is 20:00', () => {
   assert.equal(formatStopwatch(12_480), '00:12.48');
 });
 
+test('5:00 x 10 is ten work rounds and no rest', () => {
+  const preset = BUILTIN_PRESETS.find((item) => item.id === '5x10');
+  assert.equal(preset.name, '5:00 x 10');
+  assert.equal(preset.short, '5x10');
+  assert.deepEqual(preset.config, {
+    mode: 'interval', workMs: 300_000, restMs: 0, warmupMs: 0, rounds: 10, durationMs: 300_000,
+  });
+  const plan = planTimer(preset.config);
+  assert.equal(plan.totalMs, 50 * 60_000);
+  assert.equal(plan.phases.filter((phase) => phase.type === 'work').length, 10);
+  assert.equal(plan.phases.filter((phase) => phase.type === 'rest').length, 0);
+  assert.equal(chipLabel(preset.config), '5x10');
+});
+
 test('20 on / 5 off is a one-tap preset and keeps the rest rounds', () => {
   const preset = BUILTIN_PRESETS.find((item) => item.id === '20-5');
   assert.equal(chipLabel(preset.config), '20/5');
