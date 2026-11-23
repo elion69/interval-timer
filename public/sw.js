@@ -1,4 +1,4 @@
-const CACHE = 'interval-timer-v12';
+const CACHE = 'interval-timer-v13';
 const scopeURL = new URL('./', self.location);
 const scoped = (path) => new URL(path, scopeURL).href;
 const SHELL = [
@@ -12,6 +12,51 @@ const SHELL = [
   scoped('icons/apple-touch-icon.png'),
 ];
 
+function recoveryPage() {
+  const html = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<title>Interval Timer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; }
+  body { display: flex; align-items: center; justify-content: center; padding: 28px; box-sizing: border-box; text-align: center; font-family: Roboto, Helvetica, Arial, sans-serif; }
+  p { max-width: 320px; line-height: 1.4; }
+  button { margin-top: 8px; background: #fff; color: #111; border: 0; border-radius: 999px; padding: 14px 22px; font-size: 16px; font-weight: 700; }
+  .hint { color: #aaa; font-size: 14px; }
+</style>
+</head><body>
+<div>
+  <p>The timer hit a problem and stopped drawing.</p>
+  <p><button type="button" id="reload">Reload timer</button></p>
+  <p class="hint">If the screen stays black after that, in Chrome tap the lock icon beside the address, then Site settings, then Clear data. Open the timer again.</p>
+</div>
+<script>
+document.getElementById('reload').addEventListener('click', function () {
+  var jobs = [];
+  if (navigator.serviceWorker) {
+    jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+      return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+    }));
+  }
+  if (window.caches) {
+    jobs.push(caches.keys().then(function (keys) {
+      return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+    }));
+  }
+  Promise.all(jobs).catch(function () {}).then(function () {
+    location.replace(location.pathname + '?fresh=' + Date.now());
+  });
+});
+</script>
+</body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE)
@@ -21,11 +66,13 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim()),
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+    await self.clients.claim();
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) client.postMessage({ type: 'RELOAD', version: '13' });
+  })());
 });
 
 self.addEventListener('message', (event) => {
@@ -37,7 +84,8 @@ self.addEventListener('message', (event) => {
   if (!urls?.length) return;
   const safe = urls.filter((url) => {
     try {
-      return new URL(url).origin === self.location.origin && !url.includes('/sw.js');
+      const parsed = new URL(url);
+      return parsed.origin === self.location.origin && !parsed.pathname.endsWith('/sw.js');
     } catch {
       return false;
     }
@@ -58,15 +106,20 @@ function isHtml(res) {
   return (res.headers.get('content-type') || '').includes('text/html');
 }
 
+async function fromNetwork(req) {
+  // Do not call fetch(request, init). On Android that throws for a navigation
+  // request, the worker answers with a network error, and the page stays black.
+  const url = new URL(req.url);
+  url.searchParams.set('__sw', Date.now().toString(36));
+  return fetch(url.href, { cache: 'no-store', credentials: 'same-origin' });
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
-  // A waking Chrome tab asks for these. fetch() throws, and answering with the
-  // HTML page is what left the screen black.
   if (req.cache === 'only-if-cached' && req.mode !== 'same-origin') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  // Never intercept the worker script, or a bad copy can block the next update.
   if (url.pathname.endsWith('/sw.js')) return;
 
   const scriptRequest = isScript(req, url);
@@ -74,19 +127,22 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith((async () => {
     try {
-      const res = await fetch(req, scriptRequest || documentRequest ? { cache: 'no-store' } : undefined);
+      const res = await fromNetwork(req);
+      if (!res || !res.ok) throw new Error('bad-response');
       if (scriptRequest && isHtml(res)) throw new Error('html-for-script');
-      if (res && res.ok && res.type === 'basic') {
+      if (res.type === 'basic') {
         const copy = res.clone();
         caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
       }
       return res;
     } catch {
-      const cached = await caches.match(req, { ignoreVary: true });
+      const cached = await caches.match(req, { ignoreSearch: true, ignoreVary: true });
       if (cached && !(scriptRequest && isHtml(cached))) return cached;
       if (documentRequest) {
-        const shell = await caches.match(scoped('index.html'), { ignoreVary: true });
-        if (shell) return shell;
+        const shell = await caches.match(scoped('index.html'), { ignoreSearch: true, ignoreVary: true })
+          || await caches.match(scopeURL.href, { ignoreSearch: true, ignoreVary: true });
+        if (shell && isHtml(shell)) return shell;
+        return recoveryPage();
       }
       return Response.error();
     }

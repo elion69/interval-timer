@@ -90,6 +90,15 @@
       });
 
       if (navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener('message', function (event) {
+          if (!event.data || event.data.type !== 'RELOAD') return;
+          var seen = false;
+          try { seen = sessionStorage.getItem(HEAL_KEY) === '13'; } catch (err) {}
+          if (seen) return;
+          if (document.querySelector('.go-timer')) return;
+          try { sessionStorage.setItem(HEAL_KEY, '13'); } catch (err) {}
+          location.reload();
+        });
         navigator.serviceWorker.getRegistration().then(function (reg) {
           if (!reg) return;
           if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
