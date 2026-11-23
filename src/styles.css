@@ -825,3 +825,47 @@ button, input { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .go-sheet, .go-backdrop, .go-switch i, .go-toast { transition: none; }
 }
+
+/* ---- Sound & voice sheet ---- */
+.go-sound-backdrop { z-index: 32; }
+.go-soundset-btn { margin-top: -6px; }
+.go-pref-row { margin: 0 0 16px; gap: 14px; }
+.go-pref-row span { flex: 1; line-height: 1.35; }
+.go-pref-row .go-switch { flex: none; }
+.go-sound-pick {
+  display: grid;
+  grid-template-columns: 1fr 56px;
+  gap: 8px;
+}
+.go-sound-pick select {
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 17px;
+  padding: 0 14px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #3cdbff 50%), linear-gradient(135deg, #3cdbff 50%, transparent 50%);
+  background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+}
+.go-test-btn {
+  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  color: var(--chip);
+  border-radius: 14px;
+  min-height: 52px;
+  font-size: 16px;
+  font-weight: 500;
+  padding: 0 14px;
+}
+.go-sheet > .go-test-btn { width: 100%; margin: 0 0 16px; }
+.go-field-label b { color: #fff; font-weight: 500; margin-left: 6px; letter-spacing: 0; }
+.go-volume {
+  width: 100%;
+  height: 40px;
+  accent-color: var(--chip);
+}

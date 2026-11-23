@@ -2,6 +2,7 @@ import { planTimer } from './engine.js';
 import { createTimerRack } from './rack.js';
 import { createAlerts } from './audio.js';
 import { createWakeLock } from './wake.js';
+import { SOUND_CHOICES } from './sounds.js';
 import { loadState, normalizeSaved, saveState } from './storage.js';
 import { BUILTIN_PRESETS, chipLabel, configsEqual } from './presets.js';
 import { digitsToMs, formatElapsedHMS, formatHMS, formatPart, formatPhase, formatStopwatch, msToDigits } from './format.js';
@@ -56,7 +57,7 @@ export function mountTimer(container, options = {}) {
     saved.timers[0] = { ...saved.timers[0], config: { ...saved.timers[0].config, ...options.config }, run: null };
   }
 
-  const alerts = createAlerts();
+  const alerts = createAlerts(saved.prefs);
   alerts.setSound(saved.sound);
   let customPresets = saved.customPresets || [];
   let wakeOn = false;
@@ -126,6 +127,7 @@ export function mountTimer(container, options = {}) {
             <button type="button" data-mode="stopwatch" aria-pressed="false">Stopwatch</button>
           </div>
           <button type="button" class="go-presets-btn go-presets-btn-block" data-testid="presets-button-setup">Presets</button>
+          <button type="button" class="go-presets-btn go-presets-btn-block go-soundset-btn" data-testid="sound-settings-open">Sound &amp; voice</button>
           <p class="go-warn" data-warn hidden>This restarts the timer on screen. Any others keep running.</p>
           <p class="go-note" data-add-note hidden>It starts right away, alongside whatever is already running, and uses a different beep.</p>
           <div data-panel="countdown">
@@ -207,6 +209,49 @@ export function mountTimer(container, options = {}) {
           <div class="go-preset-list" data-testid="preset-list"></div>
           <div class="go-done-wrap">
             <button type="button" class="go-done" data-testid="preset-close">Close</button>
+          </div>
+        </div>
+      </div>
+      <div class="go-backdrop go-sound-backdrop" data-testid="sound-backdrop">
+        <div class="go-sheet" role="dialog" aria-modal="true" aria-label="Sound and voice" tabindex="-1" data-testid="sound-sheet">
+          <div class="go-handle"></div>
+          <h2>Sound &amp; voice</h2>
+          <div class="go-switch-row go-pref-row">
+            <span>Voice countdown “3, 2, 1”</span>
+            <button type="button" class="go-switch" data-pref="voiceCountdown" data-testid="pref-voice-countdown" role="switch" aria-checked="true" aria-label="Voice countdown"><i></i></button>
+          </div>
+          <div class="go-switch-row go-pref-row">
+            <span>Announce rounds (“Round 3”, “Last round”)</span>
+            <button type="button" class="go-switch" data-pref="voiceRounds" data-testid="pref-voice-rounds" role="switch" aria-checked="true" aria-label="Announce rounds"><i></i></button>
+          </div>
+          <button type="button" class="go-test-btn" data-testid="test-voice">▶ Test voice</button>
+          <p class="go-note" data-voice-missing hidden>This browser has no speech voice, so the countdown falls back to beeps.</p>
+          <div class="go-field">
+            <span class="go-field-label">Work starts</span>
+            <div class="go-sound-pick">
+              <select data-sound-pref="workSound" data-testid="pref-work-sound" aria-label="Sound when work starts"></select>
+              <button type="button" class="go-test-btn" data-preview="workSound" data-testid="preview-work" aria-label="Play work sound">▶</button>
+            </div>
+          </div>
+          <div class="go-field">
+            <span class="go-field-label">Rest starts</span>
+            <div class="go-sound-pick">
+              <select data-sound-pref="restSound" data-testid="pref-rest-sound" aria-label="Sound when rest starts"></select>
+              <button type="button" class="go-test-btn" data-preview="restSound" data-testid="preview-rest" aria-label="Play rest sound">▶</button>
+            </div>
+          </div>
+          <div class="go-field">
+            <span class="go-field-label">Volume <b data-testid="volume-value">85%</b></span>
+            <input type="range" class="go-volume" min="0" max="100" step="5" data-testid="pref-volume" aria-label="Volume">
+          </div>
+          <div class="go-switch-row go-pref-row">
+            <span>Keep running with the screen off</span>
+            <button type="button" class="go-switch" data-pref="keepAlive" data-testid="pref-keep-alive" role="switch" aria-checked="true" aria-label="Keep running with the screen off"><i></i></button>
+          </div>
+          <p class="go-note">With this on, a very quiet background sound keeps the timer firing while the phone is locked. It plays alongside your music instead of stopping it. Turn the phone's media volume up: the timer uses it.</p>
+          <p class="go-note">The voice and sounds are for the timer in front. Extra timers in the stack keep their own short beeps.</p>
+          <div class="go-done-wrap">
+            <button type="button" class="go-done" data-testid="sound-close">Done</button>
           </div>
         </div>
       </div>
@@ -358,6 +403,7 @@ export function mountTimer(container, options = {}) {
     if (options.storage === false) return;
     saveState({
       sound: alerts.sound,
+      prefs: alerts.prefs,
       customPresets,
       focusId: rack.focusId,
       timers: rack.list().map((session) => ({
@@ -1085,12 +1131,17 @@ export function mountTimer(container, options = {}) {
 
   function onRackChange() {
     wake.setActive(rack.anyRunning());
+    alerts.setRunning(rack.anyRunning());
     persist();
     render();
     kick();
   }
 
-  rack.on('cue', ({ cue, voice }) => alerts.play(cue, voice));
+  rack.on('cue', ({ id, cue, voice }) => {
+    const session = rack.list().find((item) => item.id === id);
+    const rounds = session ? session.timer.getSnapshot().rounds : null;
+    alerts.play(cue, { voice, primary: id === rack.focusId, rounds });
+  });
   rack.on('phasechange', ({ id, snap }) => {
     if (id === rack.focusId) announce(snap);
     else {
@@ -1144,10 +1195,111 @@ export function mountTimer(container, options = {}) {
   render();
   if (rack.anyRunning()) {
     wake.setActive(true);
+    alerts.setRunning(true);
     kick();
   }
   backdrop.inert = true;
   presetBackdrop.inert = true;
+
+  /* ---- Sound & voice settings ---- */
+  const soundBackdrop = q('[data-testid="sound-backdrop"]');
+  const soundSheet = q('[data-testid="sound-sheet"]');
+  const volumeInput = q('[data-testid="pref-volume"]');
+  const volumeValue = q('[data-testid="volume-value"]');
+  soundBackdrop.inert = true;
+  for (const select of soundSheet.querySelectorAll('select[data-sound-pref]')) {
+    for (const choice of SOUND_CHOICES) {
+      const option = document.createElement('option');
+      option.value = choice.id;
+      option.textContent = choice.name;
+      select.appendChild(option);
+    }
+  }
+  q('[data-voice-missing]').hidden = alerts.voiceSupported;
+
+  function paintSoundSheet() {
+    const prefs = alerts.prefs;
+    for (const sw of soundSheet.querySelectorAll('[data-pref]')) {
+      sw.setAttribute('aria-checked', String(!!prefs[sw.dataset.pref]));
+    }
+    for (const select of soundSheet.querySelectorAll('select[data-sound-pref]')) {
+      select.value = prefs[select.dataset.soundPref];
+    }
+    const pct = Math.round(prefs.volume * 100);
+    volumeInput.value = String(pct);
+    volumeValue.textContent = `${pct}%`;
+  }
+
+  function openSoundSheet() {
+    alerts.unlock();
+    paintSoundSheet();
+    soundBackdrop.classList.add('is-open');
+    soundBackdrop.inert = false;
+    soundSheet.focus();
+  }
+
+  function closeSoundSheet() {
+    soundBackdrop.classList.remove('is-open');
+    soundBackdrop.inert = true;
+    persist();
+  }
+
+  function setPref(patch) {
+    alerts.setPrefs(patch);
+    paintSoundSheet();
+    persist();
+  }
+
+  for (const sw of soundSheet.querySelectorAll('[data-pref]')) {
+    sw.addEventListener('click', () => setPref({ [sw.dataset.pref]: !alerts.prefs[sw.dataset.pref] }));
+  }
+  for (const select of soundSheet.querySelectorAll('select[data-sound-pref]')) {
+    select.addEventListener('change', () => {
+      setPref({ [select.dataset.soundPref]: select.value });
+      alerts.preview(select.value);
+    });
+  }
+  for (const btn of soundSheet.querySelectorAll('[data-preview]')) {
+    btn.addEventListener('click', () => {
+      alerts.unlock();
+      alerts.preview(alerts.prefs[btn.dataset.preview]);
+    });
+  }
+  volumeInput.addEventListener('input', () => {
+    const v = Number(volumeInput.value) / 100;
+    alerts.setPrefs({ volume: v });
+    volumeValue.textContent = `${Math.round(v * 100)}%`;
+  });
+  volumeInput.addEventListener('change', () => {
+    persist();
+    alerts.preview(alerts.prefs.workSound);
+  });
+  q('[data-testid="test-voice"]').addEventListener('click', () => {
+    alerts.unlock();
+    alerts.previewVoice();
+  });
+  q('[data-testid="sound-close"]').addEventListener('click', closeSoundSheet);
+  q('[data-testid="sound-settings-open"]').addEventListener('click', openSoundSheet);
+  soundBackdrop.addEventListener('click', (event) => {
+    if (event.target === soundBackdrop) closeSoundSheet();
+  });
+  soundSheet.addEventListener('click', (event) => event.stopPropagation());
+
+  /* Long-press the speaker to open Sound & voice. A normal tap still mutes. */
+  let speakerHold = 0;
+  let speakerHeld = false;
+  soundBtn.addEventListener('pointerdown', () => {
+    speakerHeld = false;
+    clearTimeout(speakerHold);
+    speakerHold = setTimeout(() => {
+      speakerHeld = true;
+      openSoundSheet();
+    }, 550);
+  });
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+    soundBtn.addEventListener(type, () => clearTimeout(speakerHold));
+  }
+  soundBtn.addEventListener('contextmenu', (event) => event.preventDefault());
 
   chipBtn.addEventListener('click', openSheet);
   q('[data-testid="presets-button"]').addEventListener('click', openPresetList);
@@ -1160,6 +1312,10 @@ export function mountTimer(container, options = {}) {
   settingsBtn.addEventListener('click', openSheet);
   q('[data-testid="add"]').addEventListener('click', openAdd);
   soundBtn.addEventListener('click', () => {
+    if (speakerHeld) {
+      speakerHeld = false;
+      return;
+    }
     alerts.unlock();
     alerts.setSound(!alerts.sound);
     paintSound();
@@ -1344,6 +1500,10 @@ export function mountTimer(container, options = {}) {
     if (event.key === 'Escape' && !workoutsEl.hidden) {
       if (!workoutMenu.hidden) closeWorkoutMenu();
       else closeWorkouts();
+      return;
+    }
+    if (event.key === 'Escape' && soundBackdrop.classList.contains('is-open')) {
+      closeSoundSheet();
       return;
     }
     if (event.key === 'Escape' && presetBackdrop.classList.contains('is-open')) {

@@ -1,4 +1,5 @@
 import { DEFAULT_CONFIG } from './presets.js';
+import { normalizePrefs } from './prefs.js';
 
 const KEY = 'go-timer.v1';
 
@@ -58,6 +59,7 @@ export function normalizeSaved(data) {
   const focusId = timers.some((timer) => timer.id === data?.focusId) ? data.focusId : timers[0].id;
   return {
     sound: data?.sound !== false,
+    prefs: normalizePrefs(data?.prefs),
     customPresets,
     focusId,
     timers,
@@ -102,6 +104,7 @@ export function saveState(state) {
     localStorage.setItem(KEY, JSON.stringify({
       version: 2,
       sound: normalized.sound,
+      prefs: normalized.prefs,
       customPresets: normalized.customPresets,
       focusId: normalized.focusId,
       timers: normalized.timers,

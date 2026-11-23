@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { planCue } from '../src/timer/audio.js';
+import { roundPhrase } from '../src/timer/voice.js';
+import { DEFAULT_PREFS, normalizePrefs } from '../src/timer/prefs.js';
+import { normalizeSaved } from '../src/timer/storage.js';
+import { SOUND_CHOICES } from '../src/timer/sounds.js';
+
+const work = (round) => ({ kind: 'phase', phase: { type: 'work', round } });
+
+test('there are at least four sound choices, including the loud ones asked for', () => {
+  const ids = SOUND_CHOICES.map((s) => s.id);
+  for (const id of ['bell', 'horn', 'double', 'whistle']) assert.ok(ids.includes(id), id);
+});
+
+test('round phrases: numbered, and "Last round" on the final one', () => {
+  assert.equal(roundPhrase(1, 8), 'Round 1');
+  assert.equal(roundPhrase(3, 8), 'Round 3');
+  assert.equal(roundPhrase(8, 8), 'Last round');
+  assert.equal(roundPhrase(5, null), 'Round 5');
+  assert.equal(roundPhrase(1, 1), 'Round 1');
+  assert.equal(roundPhrase(0, 8), null);
+});
+
+test('3-2-1 is spoken when voice countdown is on, beeped when off', () => {
+  const on = planCue({ kind: 'tick', second: 2 }, { prefs: DEFAULT_PREFS });
+  assert.deepEqual(on.map((a) => [a.type, a.text]), [['say', '2']]);
+  assert.equal(on[0].fallbackTick, true);
+  assert.equal(on[0].interrupt, true);
+  const off = planCue({ kind: 'tick', second: 1 }, { prefs: { ...DEFAULT_PREFS, voiceCountdown: false } });
+  assert.deepEqual(off, [{ type: 'tick', last: true }]);
+});
+
+test('work start plays the work sound then announces the round', () => {
+  const actions = planCue(work(8), { rounds: 8, prefs: { ...DEFAULT_PREFS, workSound: 'horn' } });
+  assert.deepEqual(actions, [
+    { type: 'sound', id: 'horn' },
+    { type: 'say', text: 'Last round', interrupt: false },
+  ]);
+  const quiet = planCue(work(3), { rounds: 8, prefs: { ...DEFAULT_PREFS, voiceRounds: false } });
+  assert.deepEqual(quiet, [{ type: 'sound', id: 'bell' }]);
+});
+
+test('rest start plays the rest sound, no announcement', () => {
+  const actions = planCue({ kind: 'phase', phase: { type: 'rest', round: 2 } }, { rounds: 8, prefs: { ...DEFAULT_PREFS, restSound: 'whistle' } });
+  assert.deepEqual(actions, [{ type: 'sound', id: 'whistle' }]);
+});
+
+test('extra timers keep their own beeps and never speak', () => {
+  assert.deepEqual(planCue({ kind: 'tick', second: 3 }, { primary: false }), [{ type: 'legacy' }]);
+  assert.deepEqual(planCue(work(2), { primary: false, rounds: 4 }), [{ type: 'legacy' }]);
+});
+
+test('prefs are cleaned and survive a save round-trip', () => {
+  assert.deepEqual(normalizePrefs({ workSound: 'nope', volume: 7 }), { ...DEFAULT_PREFS, volume: 1 });
+  const saved = normalizeSaved({ prefs: { voiceRounds: false, restSound: 'chime', volume: 0.4, keepAlive: false } });
+  assert.equal(saved.prefs.voiceRounds, false);
+  assert.equal(saved.prefs.restSound, 'chime');
+  assert.equal(saved.prefs.volume, 0.4);
+  assert.equal(saved.prefs.keepAlive, false);
+  assert.equal(saved.prefs.voiceCountdown, true);
+  assert.deepEqual(normalizeSaved(null).prefs, { ...DEFAULT_PREFS });
+});

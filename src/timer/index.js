@@ -12,7 +12,10 @@
 
 export { createIntervalTimer, planTimer, normalizeConfig } from './engine.js';
 export { createTimerRack } from './rack.js';
-export { createBeeps, createAlerts } from './audio.js';
+export { createBeeps, createAlerts, planCue } from './audio.js';
+export { SOUND_CHOICES, playSound } from './sounds.js';
+export { createVoice, roundPhrase } from './voice.js';
+export { DEFAULT_PREFS, normalizePrefs } from './prefs.js';
 export { createWakeLock } from './wake.js';
 export { loadState, saveState, normalizeSaved } from './storage.js';
 export { mountTimer } from './mount.js';

@@ -60,6 +60,18 @@ The speaker button mutes the beeps. The phone still vibrates on phase changes wh
 
 Beeps are synthesized with the Web Audio API. There are no sound files.
 
+## Sound & voice
+
+Open it from Setup → **Sound & voice**, or long-press the speaker button.
+
+- **Voice countdown** says "3, 2, 1" in the last three seconds before every switch (work → rest, rest → work, and the finish). If the phone's speech voice doesn't start, a beep plays instead.
+- **Announce rounds** says "Round 1", "Round 2"… and "Last round" on the final one, then "Done".
+- **Work starts / Rest starts** each pick from Boxing bell, Air horn, Double beep, Whistle, Buzzer, Chime, or Classic (the old soft beep). ▶ previews.
+- **Volume** sets the timer's level (the phone's media volume still applies on top).
+- **Keep running with the screen off** plays a near-silent noise bed through Web Audio while a timer runs, so Chrome keeps the page alive when the phone is locked. It's Web Audio, not a media player, so it doesn't take over music.
+
+Voice uses the Web Speech API (the phone's own text-to-speech). The voice and the chosen sounds belong to the timer in front; extra timers keep their distinct short beeps. Mute silences sound and voice; vibration stays on. All of these settings are saved on the phone.
+
 ## Presets
 
 Built in, and stored with anything you save from the setup sheet:
