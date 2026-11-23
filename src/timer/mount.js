@@ -21,7 +21,7 @@ const ICON = {
   soundOff: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 9.5h3.2L11 6.2v11.6l-3.8-3.3H4z"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M16 10l4 4M20 10l-4 4"/></svg>`,
   wake: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M10.5 17.5h3"/></svg>`,
   menu: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5.5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="18.5" r="1.5" fill="currentColor"/></svg>`,
-  restart: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`,
+  restart: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" d="M4.4 8.93A8.2 8.2 0 1 0 15.85 4.76"/><path fill="currentColor" d="M16.72 1.52L13.66 4.17L14.98 8Z"/></svg>`,
   play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.2v13.6L19.2 12 8 5.2z"/></svg>`,
   pause: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor"/></svg>`,
   skip: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 5.4v13.2L14.6 12 5 5.4z"/><rect x="16.2" y="5.4" width="2.6" height="13.2" rx="0.6" fill="currentColor"/></svg>`,
