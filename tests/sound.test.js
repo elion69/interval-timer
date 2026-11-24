@@ -27,8 +27,9 @@ test('3-2-1 is spoken when voice countdown is on, beeped when off', () => {
   assert.deepEqual(on.map((a) => [a.type, a.text]), [['say', '2']]);
   assert.equal(on[0].fallbackTick, true);
   assert.equal(on[0].interrupt, true);
-  const off = planCue({ kind: 'tick', second: 1 }, { prefs: { ...DEFAULT_PREFS, voiceCountdown: false } });
-  assert.deepEqual(off, [{ type: 'tick', last: true }]);
+  const clicks = planCue({ kind: 'tick', second: 1 }, { prefs: { ...DEFAULT_PREFS, countdownStyle: 'clicks' } });
+  assert.deepEqual(clicks, [{ type: 'tick', last: true }]);
+  assert.deepEqual(planCue({ kind: 'tick', second: 2 }, { prefs: { ...DEFAULT_PREFS, countdownStyle: 'off' } }), []);
 });
 
 test('work start plays the work sound then announces the round', () => {
@@ -58,6 +59,14 @@ test('prefs are cleaned and survive a save round-trip', () => {
   assert.equal(saved.prefs.restSound, 'chime');
   assert.equal(saved.prefs.volume, 0.4);
   assert.equal(saved.prefs.keepAlive, false);
-  assert.equal(saved.prefs.voiceCountdown, true);
+  assert.equal(saved.prefs.countdownStyle, 'voice');
+  assert.equal(normalizeSaved({ prefs: { voiceCountdown: false } }).prefs.countdownStyle, 'clicks');
   assert.deepEqual(normalizeSaved(null).prefs, { ...DEFAULT_PREFS });
+});
+
+test('clicks + round call with no bell: only the voice says the round', () => {
+  const prefs = { ...DEFAULT_PREFS, countdownStyle: 'clicks', workSound: 'none' };
+  assert.deepEqual(planCue({ kind: 'tick', second: 3 }, { prefs }), [{ type: 'tick', last: false }]);
+  assert.deepEqual(planCue(work(3), { rounds: 10, prefs }), [{ type: 'say', text: 'Round 3', interrupt: false }]);
+  assert.deepEqual(planCue({ kind: 'phase', phase: { type: 'rest', round: 3 } }, { prefs: { ...prefs, restSound: 'none' } }), []);
 });

@@ -869,3 +869,4 @@ button, input { font-family: inherit; }
   height: 40px;
   accent-color: var(--chip);
 }
+.go-countdown-style button[aria-pressed="true"] { background: #06252c; color: var(--chip); box-shadow: inset 0 0 0 1px var(--chip); }

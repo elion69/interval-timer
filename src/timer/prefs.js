@@ -1,8 +1,11 @@
 import { SOUND_IDS } from './sounds.js';
 
+/** How the last 3 seconds are marked: spoken numbers, clicks, or nothing. */
+export const COUNTDOWN_STYLES = ['voice', 'clicks', 'off'];
+
 /** Sound and voice settings. Saved on the phone with the rest of the app state. */
 export const DEFAULT_PREFS = Object.freeze({
-  voiceCountdown: true,
+  countdownStyle: 'voice',
   voiceRounds: true,
   workSound: 'bell',
   restSound: 'double',
@@ -14,7 +17,9 @@ export function normalizePrefs(prefs) {
   const p = prefs && typeof prefs === 'object' ? prefs : {};
   const volume = Number(p.volume);
   return {
-    voiceCountdown: p.voiceCountdown !== undefined ? !!p.voiceCountdown : DEFAULT_PREFS.voiceCountdown,
+    countdownStyle: COUNTDOWN_STYLES.includes(p.countdownStyle)
+      ? p.countdownStyle
+      : p.voiceCountdown === false ? 'clicks' : DEFAULT_PREFS.countdownStyle,
     voiceRounds: p.voiceRounds !== undefined ? !!p.voiceRounds : DEFAULT_PREFS.voiceRounds,
     workSound: SOUND_IDS.includes(p.workSound) ? p.workSound : DEFAULT_PREFS.workSound,
     restSound: SOUND_IDS.includes(p.restSound) ? p.restSound : DEFAULT_PREFS.restSound,

@@ -74,7 +74,8 @@ export function planCue(cue, { primary = true, rounds = null, prefs = DEFAULT_PR
   const p = normalizePrefs(prefs);
   if (cue.kind === 'tick') {
     const last = cue.second === 1;
-    if (p.voiceCountdown) return [{ type: 'say', text: String(cue.second), interrupt: true, fallbackTick: true, last }];
+    if (p.countdownStyle === 'off') return [];
+    if (p.countdownStyle === 'voice') return [{ type: 'say', text: String(cue.second), interrupt: true, fallbackTick: true, last }];
     return [{ type: 'tick', last }];
   }
   if (cue.kind === 'lap') return [{ type: 'tick', last: false }];
@@ -87,14 +88,14 @@ export function planCue(cue, { primary = true, rounds = null, prefs = DEFAULT_PR
   const type = cue.phase?.type;
   if (type === 'stopwatch') return [{ type: 'tick', last: true }];
   if (type === 'work' || type === 'countdown') {
-    const actions = [{ type: 'sound', id: p.workSound }];
+    const actions = p.workSound === 'none' ? [] : [{ type: 'sound', id: p.workSound }];
     if (type === 'work' && p.voiceRounds) {
       const text = roundPhrase(cue.phase.round, rounds);
       if (text) actions.push({ type: 'say', text, interrupt: false });
     }
     return actions;
   }
-  return [{ type: 'sound', id: p.restSound }];
+  return p.restSound === 'none' ? [] : [{ type: 'sound', id: p.restSound }];
 }
 
 function vibrate(pattern) {
@@ -267,12 +268,19 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
       const audio = context();
       if (audio) playSound(audio, output.input, id);
     },
+    /** Plays a short sample of the current countdown, start sound and round call. */
     previewVoice() {
-      context();
-      voice.say('3', { interrupt: true, rate: 1.15, volume: Math.min(1, prefs.volume + 0.15) });
-      voice.say('2', { rate: 1.15, volume: Math.min(1, prefs.volume + 0.15) });
-      voice.say('1', { rate: 1.15, volume: Math.min(1, prefs.volume + 0.15) });
-      voice.say('Round 3', { volume: Math.min(1, prefs.volume + 0.15) });
+      const audio = context();
+      const vol = Math.min(1, prefs.volume + 0.15);
+      const at = (ms, fn) => setTimeout(fn, ms);
+      [3, 2, 1].forEach((n, i) => at(i * 1000, () => {
+        if (prefs.countdownStyle === 'voice') voice.say(String(n), { interrupt: true, rate: 1.15, volume: vol });
+        else if (prefs.countdownStyle === 'clicks' && audio) playTick(audio, output.input, { last: n === 1 });
+      }));
+      at(3000, () => {
+        if (audio && prefs.workSound !== 'none') playSound(audio, output.input, prefs.workSound);
+        if (prefs.voiceRounds) voice.say('Round 3', { volume: vol });
+      });
     },
     play,
     close() {

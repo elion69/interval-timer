@@ -14,6 +14,7 @@ export const SOUND_CHOICES = [
   { id: 'buzzer', name: 'Buzzer' },
   { id: 'chime', name: 'Chime' },
   { id: 'classic', name: 'Classic (soft)' },
+  { id: 'none', name: 'No sound' },
 ];
 
 export const SOUND_IDS = SOUND_CHOICES.map((sound) => sound.id);
@@ -168,15 +169,18 @@ const SYNTHS = {
   },
 };
 
-/** A short, punchy countdown blip (used for 3-2-1 when the voice is off). */
+/** A sharp countdown click, like a metronome or a stopwatch clicker. */
 export function playTick(ctx, out, { last = false, when = 0 } = {}) {
   const t = ctx.currentTime + when;
-  const { amp, end } = env(ctx, out, t, { attack: 0.002, peak: 0.45, hold: 0.06, decay: 0.05 });
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 4500;
-  lp.connect(amp);
-  osc(ctx, lp, t, end, { type: 'square', freq: last ? 1320 : 880 });
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = last ? 3400 : 2600;
+  bp.Q.value = 1.4;
+  const snap = env(ctx, out, t, { attack: 0.0008, peak: last ? 0.95 : 0.85, decay: 0.035 });
+  bp.connect(snap.amp);
+  noise(ctx, bp, t, snap.end);
+  const body = env(ctx, out, t, { attack: 0.0008, peak: 0.5, decay: 0.045 });
+  osc(ctx, body.amp, t, body.end, { type: 'triangle', freq: last ? 2100 : 1600 });
 }
 
 /** A rising arpeggio for the end of the workout. */
@@ -191,6 +195,7 @@ export function playFinish(ctx, out, when = 0) {
 }
 
 export function playSound(ctx, out, id, when = 0) {
+  if (id === 'none') return 0;
   const synth = SYNTHS[id] || SYNTHS.bell;
   return synth(ctx, out, ctx.currentTime + when);
 }

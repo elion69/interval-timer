@@ -216,15 +216,17 @@ export function mountTimer(container, options = {}) {
         <div class="go-sheet" role="dialog" aria-modal="true" aria-label="Sound and voice" tabindex="-1" data-testid="sound-sheet">
           <div class="go-handle"></div>
           <h2>Sound &amp; voice</h2>
-          <div class="go-switch-row go-pref-row">
-            <span>Voice countdown “3, 2, 1”</span>
-            <button type="button" class="go-switch" data-pref="voiceCountdown" data-testid="pref-voice-countdown" role="switch" aria-checked="true" aria-label="Voice countdown"><i></i></button>
+          <span class="go-field-label">Countdown (last 3 seconds)</span>
+          <div class="go-segment go-countdown-style" role="group" aria-label="Countdown style" data-testid="pref-countdown-style">
+            <button type="button" data-countdown="voice" aria-pressed="true">Voice 3-2-1</button>
+            <button type="button" data-countdown="clicks" aria-pressed="false">Clicks</button>
+            <button type="button" data-countdown="off" aria-pressed="false">Off</button>
           </div>
           <div class="go-switch-row go-pref-row">
             <span>Announce rounds (“Round 3”, “Last round”)</span>
             <button type="button" class="go-switch" data-pref="voiceRounds" data-testid="pref-voice-rounds" role="switch" aria-checked="true" aria-label="Announce rounds"><i></i></button>
           </div>
-          <button type="button" class="go-test-btn" data-testid="test-voice">▶ Test voice</button>
+          <button type="button" class="go-test-btn" data-testid="test-voice">▶ Test countdown + round call</button>
           <p class="go-note" data-voice-missing hidden>This browser has no speech voice, so the countdown falls back to beeps.</p>
           <div class="go-field">
             <span class="go-field-label">Work starts</span>
@@ -1225,6 +1227,9 @@ export function mountTimer(container, options = {}) {
     for (const select of soundSheet.querySelectorAll('select[data-sound-pref]')) {
       select.value = prefs[select.dataset.soundPref];
     }
+    for (const btn of soundSheet.querySelectorAll('[data-countdown]')) {
+      btn.setAttribute('aria-pressed', String(prefs.countdownStyle === btn.dataset.countdown));
+    }
     const pct = Math.round(prefs.volume * 100);
     volumeInput.value = String(pct);
     volumeValue.textContent = `${pct}%`;
@@ -1252,6 +1257,12 @@ export function mountTimer(container, options = {}) {
 
   for (const sw of soundSheet.querySelectorAll('[data-pref]')) {
     sw.addEventListener('click', () => setPref({ [sw.dataset.pref]: !alerts.prefs[sw.dataset.pref] }));
+  }
+  for (const btn of soundSheet.querySelectorAll('[data-countdown]')) {
+    btn.addEventListener('click', () => {
+      alerts.unlock();
+      setPref({ countdownStyle: btn.dataset.countdown });
+    });
   }
   for (const select of soundSheet.querySelectorAll('select[data-sound-pref]')) {
     select.addEventListener('change', () => {

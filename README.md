@@ -64,7 +64,7 @@ Beeps are synthesized with the Web Audio API. There are no sound files.
 
 Open it from Setup → **Sound & voice**, or long-press the speaker button.
 
-- **Voice countdown** says "3, 2, 1" in the last three seconds before every switch (work → rest, rest → work, and the finish). If the phone's speech voice doesn't start, a beep plays instead.
+- **Countdown** marks the last three seconds before every switch (work → rest, rest → work, and the finish): **Voice 3-2-1** speaks the numbers, **Clicks** plays three sharp clicks, **Off** stays quiet. If the phone's speech voice doesn't start, a click plays instead.
 - **Announce rounds** says "Round 1", "Round 2"… and "Last round" on the final one, then "Done".
 - **Work starts / Rest starts** each pick from Boxing bell, Air horn, Double beep, Whistle, Buzzer, Chime, or Classic (the old soft beep). ▶ previews.
 - **Volume** sets the timer's level (the phone's media volume still applies on top).
