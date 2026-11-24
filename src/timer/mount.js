@@ -59,6 +59,11 @@ export function mountTimer(container, options = {}) {
 
   const alerts = createAlerts(saved.prefs);
   alerts.setSound(saved.sound);
+  try {
+    alerts.prepare();
+  } catch {
+    /* audio not available */
+  }
   let customPresets = saved.customPresets || [];
   let wakeOn = false;
   let raf = 0;
@@ -1154,8 +1159,9 @@ export function mountTimer(container, options = {}) {
   rack.on('cue', ({ id, cue, voice }) => {
     const session = rack.list().find((item) => item.id === id);
     const rounds = session ? session.timer.getSnapshot().rounds : null;
-    alerts.play(cue, { voice, primary: id === rack.focusId, rounds, hidden: document.visibilityState === 'hidden' });
+    // Queue first, so a cue that is already on the audio clock isn't also played live.
     refreshSchedule();
+    alerts.play(cue, { voice, primary: id === rack.focusId, rounds, hidden: document.visibilityState === 'hidden' });
   });
   rack.on('phasechange', ({ id, snap }) => {
     if (id === rack.focusId) announce(snap);

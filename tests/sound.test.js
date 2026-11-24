@@ -91,3 +91,15 @@ test('timeline handles unlimited rounds from the middle of a workout', () => {
     [400000, 'work', 11], [430000, 'rest', 11], [440000, 'work', 12],
   ]);
 });
+
+import { clipKey, CLIP_KEYS } from '../src/timer/audio.js';
+import { existsSync } from 'node:fs';
+
+test('every phrase the timer says has a recorded clip', () => {
+  assert.equal(clipKey('3'), 'n3');
+  assert.equal(clipKey('Round 42'), 'r42');
+  assert.equal(clipKey('Last round'), 'last');
+  assert.equal(clipKey('Done'), 'done');
+  assert.equal(clipKey('Round 101'), null);
+  for (const key of CLIP_KEYS) assert.ok(existsSync(new URL(`../public/voice/${key}.ogg`, import.meta.url)), key);
+});

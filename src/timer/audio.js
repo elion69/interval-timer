@@ -99,6 +99,19 @@ export function planCue(cue, { primary = true, rounds = null, prefs = DEFAULT_PR
   return p.restSound === 'none' ? [] : [{ type: 'sound', id: p.restSound }];
 }
 
+/** Which recorded voice clip says this phrase, or null if there isn't one. */
+export function clipKey(text) {
+  const t = String(text).trim().toLowerCase();
+  if (t === '1' || t === '2' || t === '3') return `n${t}`;
+  if (t === 'last round') return 'last';
+  if (t === 'done') return 'done';
+  const m = /^round (\d+)$/.exec(t);
+  if (m && Number(m[1]) >= 1 && Number(m[1]) <= 100) return `r${Number(m[1])}`;
+  return null;
+}
+
+export const CLIP_KEYS = ['n1', 'n2', 'n3', 'last', 'done', ...Array.from({ length: 100 }, (_, i) => `r${i + 1}`)];
+
 function vibrate(pattern) {
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -164,6 +177,45 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
   let wantAlive = false;
   const voice = createVoice();
 
+  /* ---- Recorded voice (female, made with Piper) ----
+   * Small Opus clips decoded into Web Audio buffers, so the voice can be queued
+   * on the audio clock like the clicks and keeps talking in the background.
+   * The phone's speech engine is only a fallback. */
+  const clips = new Map();
+  let clipsLoading = null;
+  let onClipsReady = null;
+
+  function loadClips(audio) {
+    if (clipsLoading || typeof fetch !== 'function' || typeof document === 'undefined') return clipsLoading;
+    clipsLoading = Promise.all(CLIP_KEYS.map(async (key) => {
+      try {
+        const res = await fetch(new URL(`voice/${key}.ogg`, document.baseURI));
+        if (!res.ok) return;
+        const buf = await audio.decodeAudioData(await res.arrayBuffer());
+        clips.set(key, buf);
+      } catch {
+        /* that clip falls back to the phone's voice */
+      }
+    })).then(() => onClipsReady?.());
+    return clipsLoading;
+  }
+
+  function clipFor(text) {
+    const key = clipKey(text);
+    return key ? clips.get(key) || null : null;
+  }
+
+  function playClip(audio, out, buffer, when = 0) {
+    const src = audio.createBufferSource();
+    src.buffer = buffer;
+    const gain = audio.createGain();
+    gain.gain.value = 1.1;
+    src.connect(gain);
+    gain.connect(out);
+    src.start(audio.currentTime + when);
+    return buffer.duration;
+  }
+
   // Let the timer's sounds mix with music instead of taking it over, where the browser supports it.
   try {
     if (typeof navigator !== 'undefined' && navigator.audioSession) navigator.audioSession.type = 'ambient';
@@ -182,6 +234,7 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
       }
       output = createOutput(ctx, prefs.volume);
       keepAlive = createKeepAlive(ctx);
+      loadClips(ctx);
       ctx.addEventListener?.('statechange', () => {
         if (ctx?.state === 'interrupted' || ctx?.state === 'suspended') ctx.resume().catch(() => {});
       });
@@ -208,6 +261,11 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
       } else if (action.type === 'finish') {
         if (audio) playFinish(audio, output.input);
       } else if (action.type === 'say') {
+        const clip = audio && audio.state === 'running' ? clipFor(action.text) : null;
+        if (clip) {
+          playClip(audio, output.input, clip);
+          continue;
+        }
         const fallback = action.fallbackTick && audio
           ? () => playTick(audio, output.input, { last: action.last })
           : undefined;
@@ -251,9 +309,10 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
     const out = [];
     for (const a of actions) {
       if (a.type === 'say') {
-        // Spoken numbers need the page awake. While the app is in the
-        // background, a click stands in for each number so the countdown is never silent.
-        if (a.fallbackTick && hidden) out.push({ type: 'tick', last: a.last });
+        if (clipFor(a.text)) out.push({ type: 'clip', text: a.text });
+        // No recording for this phrase: the phone's voice needs the page awake,
+        // so while the app is in the background a click stands in for a number.
+        else if (a.fallbackTick && hidden) out.push({ type: 'tick', last: a.last });
       } else {
         out.push(a);
       }
@@ -266,7 +325,17 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
    * @param {object|null} snap its snapshot
    * @param {{ hidden?: boolean }} [opts]
    */
-  function syncSchedule(id, snap, { hidden = false } = {}) {
+  let lastSync = null;
+  onClipsReady = () => {
+    if (!lastSync || !ctx) return;
+    // Bring the remembered snapshot up to now before re-queueing.
+    const [id, snap, opts, at] = lastSync;
+    const moved = snap && snap.status === 'running' ? (ctx.currentTime - at) * 1000 : 0;
+    syncSchedule(id, snap && { ...snap, totalElapsedMs: snap.totalElapsedMs + moved }, { ...opts, catchUp: false });
+  };
+
+  function syncSchedule(id, snap, { hidden = false, catchUp = true } = {}) {
+    lastSync = [id, snap, { hidden }, ctx ? ctx.currentTime : 0];
     if (!sound || !id || !snap || snap.status !== 'running' || snap.mode === 'stopwatch') {
       cancelSchedule();
       return;
@@ -278,10 +347,11 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
     }
     const elapsed = snap.totalElapsedMs;
     const anchor = audio.currentTime - elapsed / 1000;
-    const key = `${id}|${JSON.stringify(snap.config)}|${JSON.stringify({ ...prefs, volume: 0 })}|${hidden}`;
+    const key = `${id}|${JSON.stringify(snap.config)}|${JSON.stringify({ ...prefs, volume: 0 })}|${hidden}|${clips.size}`;
     if (!sched || sched.key !== key || Math.abs(anchor - sched.anchor) > 0.15) {
       cancelSchedule();
-      sched = { key, anchor, until: elapsed - 250, buses: new Map() };
+      // catchUp replays a cue that fired in the last instant (the one that started this run).
+      sched = { key, anchor, until: catchUp ? elapsed - 250 : elapsed + 1, buses: new Map() };
     }
     const now = audio.currentTime;
     for (const [k, bus] of sched.buses) {
@@ -302,6 +372,7 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
         if (action.type === 'sound') length = Math.max(length, playSound(audio, node, action.id, when) || 0);
         else if (action.type === 'tick') playTick(audio, node, { last: action.last, when });
         else if (action.type === 'finish') length = Math.max(length, playFinish(audio, node, when));
+        else if (action.type === 'clip') length = Math.max(length, playClip(audio, node, clipFor(action.text), when));
       }
       sched.buses.set(event.key, { node, end: now + when + length + 0.5 });
     }
@@ -316,7 +387,7 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
       let actions = planCue(cue, { primary, rounds: o.rounds ?? null, prefs });
       if (primary && schedulerLive()) {
         // The audio clock already has the sounds queued; only speech is live.
-        actions = actions.filter((a) => a.type === 'say' && !(o.hidden && a.fallbackTick));
+        actions = actions.filter((a) => a.type === 'say' && !clipFor(a.text) && !(o.hidden && a.fallbackTick));
         actions = actions.map((a) => ({ ...a, fallbackTick: false }));
       }
       run(actions, cue, voiceIndex);
@@ -360,6 +431,10 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
     get voiceSupported() {
       return voice.supported;
     },
+    /** Create the audio engine early (it stays paused until a tap) so the voice clips are ready by Start. */
+    prepare() {
+      context();
+    },
     unlock() {
       context();
       voice.unlock();
@@ -373,13 +448,18 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
       const audio = context();
       const vol = Math.min(1, prefs.volume + 0.15);
       const at = (ms, fn) => setTimeout(fn, ms);
+      const say = (text, opts) => {
+        const clip = audio ? clipFor(text) : null;
+        if (clip) playClip(audio, output.input, clip);
+        else voice.say(text, opts);
+      };
       [3, 2, 1].forEach((n, i) => at(i * 1000, () => {
-        if (prefs.countdownStyle === 'voice') voice.say(String(n), { interrupt: true, rate: 1.15, volume: vol });
+        if (prefs.countdownStyle === 'voice') say(String(n), { interrupt: true, rate: 1.15, volume: vol });
         else if (prefs.countdownStyle === 'clicks' && audio) playTick(audio, output.input, { last: n === 1 });
       }));
       at(3000, () => {
         if (audio && prefs.workSound !== 'none') playSound(audio, output.input, prefs.workSound);
-        if (prefs.voiceRounds) voice.say('Round 3', { volume: vol });
+        if (prefs.voiceRounds) say('Round 3', { volume: vol });
       });
     },
     play,
