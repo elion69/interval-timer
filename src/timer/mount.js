@@ -192,7 +192,7 @@ export function mountTimer(container, options = {}) {
             <input data-testid="preset-name" maxlength="24" placeholder="Name this setup" enterkeyhint="done" autocomplete="off">
             <button type="button" data-testid="preset-save">Save</button>
           </div>
-          <p class="go-note">The badge on the ring is how many rounds are left, including the one you're in. Rest is skipped after the last round.</p>
+          <p class="go-note">The badge on the ring is the round you're on, counting up from 1. Rest is skipped after the last round.</p>
           <p class="go-note" data-install-note>On Android, open this page in Chrome, tap the menu, then Install app or Add to Home screen. After one visit it works offline.</p>
           <button type="button" class="go-install" data-testid="install" hidden>Install app</button>
           <button type="button" class="go-remove" data-testid="remove-timer" hidden>Remove this timer</button>
@@ -509,7 +509,7 @@ export function mountTimer(container, options = {}) {
       ? String(snap.laps.length + 1)
       : snap.phase.type === 'done' || snap.mode === 'countdown'
         ? ''
-        : snap.roundsRemaining == null ? '∞' : String(snap.roundsRemaining);
+        : String(Math.max(0, snap.phase.round || 0));
     const angle = -Math.PI / 2 + Math.min(1, progress) * Math.PI * 2;
     const x = CX + Math.cos(angle) * ARC_R;
     const y = CX + Math.sin(angle) * ARC_R;

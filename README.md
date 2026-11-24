@@ -8,7 +8,7 @@ Three modes:
 - **Intervals** — work, rest, an optional warm-up, and a fixed or unlimited number of rounds.
 - **Stopwatch** — counts up, with laps. The ring sweeps once a minute.
 
-The ring moves clockwise with the current interval. Pink is work (`go`), green is rest, amber is warm-up, blue is a plain countdown. The number on the ring is how many rounds are left, including the one you're in. The thin clock at the top is the total time left (or elapsed, when rounds are unlimited).
+The ring moves clockwise with the current interval. Pink is work (`go`), green is rest, amber is warm-up, blue is a plain countdown. The number on the ring is the round you're on, counting up from 1 (0 during warm-up). The thin clock at the top is the total time left (or elapsed, when rounds are unlimited).
 
 Timing uses the wall clock, not `setInterval` ticks, so locking the phone or switching apps does not make it drift. A running session is remembered in `localStorage` and continues if the page is opened again.
 
