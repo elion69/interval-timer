@@ -70,3 +70,24 @@ test('clicks + round call with no bell: only the voice says the round', () => {
   assert.deepEqual(planCue(work(3), { rounds: 10, prefs }), [{ type: 'say', text: 'Round 3', interrupt: false }]);
   assert.deepEqual(planCue({ kind: 'phase', phase: { type: 'rest', round: 3 } }, { prefs: { ...prefs, restSound: 'none' } }), []);
 });
+
+import { cuesBetween } from '../src/timer/timeline.js';
+
+test('timeline lists every cue ahead: phase starts, 3-2-1 ticks, finish', () => {
+  const cfg = { mode: 'interval', workMs: 5000, restMs: 4000, warmupMs: 0, rounds: 2 };
+  const list = cuesBetween(cfg, 0, 60000).map((e) => `${e.at}:${e.cue.kind}${e.cue.second ?? ''}:${e.cue.phase.type}${e.cue.phase.round}`);
+  assert.deepEqual(list, [
+    '0:phase:work1', '2000:tick3:work1', '3000:tick2:work1', '4000:tick1:work1',
+    '5000:phase:rest1', '6000:tick3:rest1', '7000:tick2:rest1', '8000:tick1:rest1',
+    '9000:phase:work2', '11000:tick3:work2', '12000:tick2:work2', '13000:tick1:work2',
+    '14000:complete:done2',
+  ]);
+});
+
+test('timeline handles unlimited rounds from the middle of a workout', () => {
+  const cfg = { mode: 'interval', workMs: 30000, restMs: 10000, warmupMs: 0, rounds: null };
+  const list = cuesBetween(cfg, 400000, 445000).filter((e) => e.cue.kind === 'phase');
+  assert.deepEqual(list.map((e) => [e.at, e.cue.phase.type, e.cue.phase.round]), [
+    [400000, 'work', 11], [430000, 'rest', 11], [440000, 'work', 12],
+  ]);
+});

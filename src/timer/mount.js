@@ -1131,9 +1131,21 @@ export function mountTimer(container, options = {}) {
     focusedTimer().toggle();
   }
 
+  /** Queue the front timer's sounds on the audio clock so they survive the app going to the background. */
+  function refreshSchedule() {
+    const front = rack.list().find((item) => item.id === rack.focusId);
+    alerts.syncSchedule(front?.id ?? null, front ? front.timer.getSnapshot() : null, {
+      hidden: document.visibilityState === 'hidden',
+    });
+  }
+  const scheduleTimer = setInterval(() => {
+    if (rack.anyRunning()) refreshSchedule();
+  }, 20000);
+
   function onRackChange() {
     wake.setActive(rack.anyRunning());
     alerts.setRunning(rack.anyRunning());
+    refreshSchedule();
     persist();
     render();
     kick();
@@ -1142,7 +1154,8 @@ export function mountTimer(container, options = {}) {
   rack.on('cue', ({ id, cue, voice }) => {
     const session = rack.list().find((item) => item.id === id);
     const rounds = session ? session.timer.getSnapshot().rounds : null;
-    alerts.play(cue, { voice, primary: id === rack.focusId, rounds });
+    alerts.play(cue, { voice, primary: id === rack.focusId, rounds, hidden: document.visibilityState === 'hidden' });
+    refreshSchedule();
   });
   rack.on('phasechange', ({ id, snap }) => {
     if (id === rack.focusId) announce(snap);
@@ -1251,6 +1264,7 @@ export function mountTimer(container, options = {}) {
 
   function setPref(patch) {
     alerts.setPrefs(patch);
+    refreshSchedule();
     paintSoundSheet();
     persist();
   }
@@ -1329,6 +1343,7 @@ export function mountTimer(container, options = {}) {
     }
     alerts.unlock();
     alerts.setSound(!alerts.sound);
+    refreshSchedule();
     paintSound();
     persist();
   });
@@ -1539,6 +1554,7 @@ export function mountTimer(container, options = {}) {
   }
 
   function onVisibility() {
+    refreshSchedule();
     if (document.visibilityState === 'hidden') {
       persist();
       if (raf) cancelAnimationFrame(raf);
@@ -1597,6 +1613,7 @@ export function mountTimer(container, options = {}) {
     if (raf) cancelAnimationFrame(raf);
     document.removeEventListener('keydown', onKey);
     document.removeEventListener('visibilitychange', onVisibility);
+    clearInterval(scheduleTimer);
     window.removeEventListener('pagehide', persist);
     remote.stop();
     wake.destroy();

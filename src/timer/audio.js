@@ -6,6 +6,7 @@
 import { createKeepAlive, createOutput, playFinish, playSound, playTick } from './sounds.js';
 import { createVoice, roundPhrase } from './voice.js';
 import { DEFAULT_PREFS, normalizePrefs } from './prefs.js';
+import { cuesBetween } from './timeline.js';
 
 function tone(ctx, out, { freq, dur, gain, type = 'sine', when = 0 }) {
   const t = ctx.currentTime + when;
@@ -224,10 +225,102 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
    * @param {object} cue engine cue
    * @param {number|{ voice?: number, primary?: boolean, rounds?: number|null }} [opts]
    */
+  /* ---- Ahead-of-time scheduling on the audio clock ----
+   * Sounds and clicks for the timer in front are queued on the AudioContext
+   * timeline minutes ahead. The audio thread plays them on time even when
+   * Android throttles the page (another app in front, screen off). Each queued
+   * cue gets its own gain "bus" so it can be cancelled on pause, skip or edit. */
+  const HORIZON_MS = 10 * 60 * 1000;
+  let sched = null;
+
+  function cancelSchedule() {
+    if (!sched) return;
+    for (const bus of sched.buses.values()) {
+      try { bus.node.disconnect(); } catch { /* ignore */ }
+    }
+    sched = null;
+  }
+
+  function schedulerLive() {
+    return !!(sched && ctx && ctx.state === 'running');
+  }
+
+  /** What the scheduler queues for one cue: everything except speech. */
+  function scheduledActions(cue, rounds, hidden) {
+    const actions = planCue(cue, { primary: true, rounds, prefs });
+    const out = [];
+    for (const a of actions) {
+      if (a.type === 'say') {
+        // Spoken numbers need the page awake. While the app is in the
+        // background, a click stands in for each number so the countdown is never silent.
+        if (a.fallbackTick && hidden) out.push({ type: 'tick', last: a.last });
+      } else {
+        out.push(a);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * @param {string|null} id focused timer id
+   * @param {object|null} snap its snapshot
+   * @param {{ hidden?: boolean }} [opts]
+   */
+  function syncSchedule(id, snap, { hidden = false } = {}) {
+    if (!sound || !id || !snap || snap.status !== 'running' || snap.mode === 'stopwatch') {
+      cancelSchedule();
+      return;
+    }
+    const audio = context();
+    if (!audio || audio.state !== 'running') {
+      cancelSchedule();
+      return;
+    }
+    const elapsed = snap.totalElapsedMs;
+    const anchor = audio.currentTime - elapsed / 1000;
+    const key = `${id}|${JSON.stringify(snap.config)}|${JSON.stringify({ ...prefs, volume: 0 })}|${hidden}`;
+    if (!sched || sched.key !== key || Math.abs(anchor - sched.anchor) > 0.15) {
+      cancelSchedule();
+      sched = { key, anchor, until: elapsed - 250, buses: new Map() };
+    }
+    const now = audio.currentTime;
+    for (const [k, bus] of sched.buses) {
+      if (bus.end < now - 5) {
+        try { bus.node.disconnect(); } catch { /* ignore */ }
+        sched.buses.delete(k);
+      }
+    }
+    const to = elapsed + HORIZON_MS;
+    if (to <= sched.until) return;
+    for (const event of cuesBetween(snap.config, sched.until, to)) {
+      if (sched.buses.has(event.key)) continue;
+      const when = Math.max(0, sched.anchor + event.at / 1000 - now);
+      const node = audio.createGain();
+      node.connect(output.input);
+      let length = 0.2;
+      for (const action of scheduledActions(event.cue, snap.rounds, hidden)) {
+        if (action.type === 'sound') length = Math.max(length, playSound(audio, node, action.id, when) || 0);
+        else if (action.type === 'tick') playTick(audio, node, { last: action.last, when });
+        else if (action.type === 'finish') length = Math.max(length, playFinish(audio, node, when));
+      }
+      sched.buses.set(event.key, { node, end: now + when + length + 0.5 });
+    }
+    sched.until = to;
+  }
+
   function play(cue, opts = {}) {
     const o = typeof opts === 'number' ? { voice: opts, primary: true } : opts;
     const voiceIndex = o.voice ?? 0;
-    if (sound) run(planCue(cue, { primary: o.primary !== false, rounds: o.rounds ?? null, prefs }), cue, voiceIndex);
+    const primary = o.primary !== false;
+    if (sound) {
+      let actions = planCue(cue, { primary, rounds: o.rounds ?? null, prefs });
+      if (primary && schedulerLive()) {
+        // The audio clock already has the sounds queued; only speech is live.
+        actions = actions.filter((a) => a.type === 'say' && !(o.hidden && a.fallbackTick));
+        actions = actions.map((a) => ({ ...a, fallbackTick: false }));
+      }
+      run(actions, cue, voiceIndex);
+    }
     vibrate(buzzPattern(cue.kind, voiceIndex, cue.phase?.type));
   }
 
@@ -237,7 +330,14 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
     },
     setSound(on) {
       sound = !!on;
-      if (!sound) voice.cancel();
+      if (!sound) {
+        voice.cancel();
+        cancelSchedule();
+      }
+    },
+    syncSchedule,
+    get scheduled() {
+      return sched ? sched.buses.size : 0;
     },
     get prefs() {
       return { ...prefs };
@@ -284,6 +384,7 @@ export function createAlerts(initialPrefs = DEFAULT_PREFS) {
     },
     play,
     close() {
+      cancelSchedule();
       keepAlive?.stop();
       voice.cancel();
       ctx?.close().catch(() => {});
