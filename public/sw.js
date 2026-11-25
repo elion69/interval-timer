@@ -1,4 +1,4 @@
-const CACHE = 'interval-timer-v19';
+const CACHE = 'interval-timer-v20';
 const scopeURL = new URL('./', self.location);
 const scoped = (path) => new URL(path, scopeURL).href;
 const SHELL = [
@@ -71,7 +71,7 @@ self.addEventListener('activate', (event) => {
     await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
     await self.clients.claim();
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of windows) client.postMessage({ type: 'RELOAD', version: '19' });
+    for (const client of windows) client.postMessage({ type: 'RELOAD', version: '20' });
   })());
 });
 
