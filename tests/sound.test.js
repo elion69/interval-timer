@@ -103,3 +103,9 @@ test('every phrase the timer says has a recorded clip', () => {
   assert.equal(clipKey('Round 101'), null);
   for (const key of CLIP_KEYS) assert.ok(existsSync(new URL(`../public/voice/${key}.ogg`, import.meta.url)), key);
 });
+
+test('deleted built-in presets are remembered', () => {
+  const saved = normalizeSaved({ hiddenBuiltins: ['tabata', 'tabata', 5] });
+  assert.deepEqual(saved.hiddenBuiltins, ['tabata']);
+  assert.deepEqual(normalizeSaved(null).hiddenBuiltins, []);
+});

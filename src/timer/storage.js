@@ -56,11 +56,15 @@ export function normalizeSaved(data) {
       run: data?.run,
     }, 0)];
   }
+  const hiddenBuiltins = Array.isArray(data?.hiddenBuiltins)
+    ? [...new Set(data.hiddenBuiltins.filter((id) => typeof id === 'string'))].slice(0, 50)
+    : [];
   const focusId = timers.some((timer) => timer.id === data?.focusId) ? data.focusId : timers[0].id;
   return {
     sound: data?.sound !== false,
     prefs: normalizePrefs(data?.prefs),
     customPresets,
+    hiddenBuiltins,
     focusId,
     timers,
   };
@@ -106,6 +110,7 @@ export function saveState(state) {
       sound: normalized.sound,
       prefs: normalized.prefs,
       customPresets: normalized.customPresets,
+      hiddenBuiltins: normalized.hiddenBuiltins,
       focusId: normalized.focusId,
       timers: normalized.timers,
     }));

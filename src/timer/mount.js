@@ -31,6 +31,7 @@ const ICON = {
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   clipboard: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 3.2h6v2.4H9z" fill="currentColor"/><circle cx="12" cy="13.2" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12 11.8V13.2l1.3.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   back: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15M9.5 6.5V4.6c0-.6.5-1.1 1.1-1.1h2.8c.6 0 1.1.5 1.1 1.1v1.9M6.5 6.5l.9 12.6c.1.8.7 1.4 1.5 1.4h6.2c.8 0 1.4-.6 1.5-1.4l.9-12.6M10.2 10.5v6.5M13.8 10.5v6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   pencil: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4.1-1.1L19.2 7.8 16.2 4.8 5.1 15.9 4 20z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13.8 7.2l3 3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
 };
@@ -65,6 +66,7 @@ export function mountTimer(container, options = {}) {
     /* audio not available */
   }
   let customPresets = saved.customPresets || [];
+  let hiddenBuiltins = saved.hiddenBuiltins || [];
   let wakeOn = false;
   let raf = 0;
   let toastTimer = 0;
@@ -201,6 +203,7 @@ export function mountTimer(container, options = {}) {
           <p class="go-note" data-install-note>On Android, open this page in Chrome, tap the menu, then Install app or Add to Home screen. After one visit it works offline.</p>
           <button type="button" class="go-install" data-testid="install" hidden>Install app</button>
           <button type="button" class="go-remove" data-testid="remove-timer" hidden>Remove this timer</button>
+          <button type="button" class="go-remove" data-testid="workout-delete" hidden>Delete this workout</button>
           <div class="go-done-wrap">
             <button type="button" class="go-done" data-testid="done">Done</button>
           </div>
@@ -329,6 +332,8 @@ export function mountTimer(container, options = {}) {
   const warn = q('[data-warn]');
   const addNote = q('[data-add-note]');
   const removeBtn = q('[data-testid="remove-timer"]');
+  const workoutDeleteBtn = q('[data-testid="workout-delete"]');
+  let editingPreset = null;
   const doneBtn = q('[data-testid="done"]');
   const stack = q('[data-testid="stack"]');
   const summary = q('[data-testid="summary"]');
@@ -394,7 +399,38 @@ export function mountTimer(container, options = {}) {
   }
 
   function presets() {
-    return [...BUILTIN_PRESETS, ...customPresets];
+    return [...BUILTIN_PRESETS.filter((p) => !hiddenBuiltins.includes(p.id)), ...customPresets];
+  }
+
+  /** Delete a preset/workout (built-in ones are hidden, and can be restored). Undo for a few seconds. */
+  function removePreset(preset) {
+    const before = { customPresets: [...customPresets], hiddenBuiltins: [...hiddenBuiltins] };
+    if (preset.builtin) hiddenBuiltins = [...new Set([...hiddenBuiltins, preset.id])];
+    else customPresets = customPresets.filter((item) => item.id !== preset.id);
+    persist();
+    repaintPresetViews();
+    showToast(`Deleted “${preset.name}”`, {
+      label: 'Undo',
+      run: () => {
+        customPresets = before.customPresets;
+        hiddenBuiltins = before.hiddenBuiltins;
+        persist();
+        repaintPresetViews();
+      },
+    });
+  }
+
+  function restoreBuiltins() {
+    hiddenBuiltins = [];
+    persist();
+    repaintPresetViews();
+    showToast('Built-in workouts are back');
+  }
+
+  function repaintPresetViews() {
+    paintPresets();
+    if (presetBackdrop.classList.contains('is-open')) paintPresetList();
+    if (!workoutsEl.hidden) paintWorkouts();
   }
 
   function captureRun(timer) {
@@ -412,6 +448,7 @@ export function mountTimer(container, options = {}) {
       sound: alerts.sound,
       prefs: alerts.prefs,
       customPresets,
+      hiddenBuiltins,
       focusId: rack.focusId,
       timers: rack.list().map((session) => ({
         id: session.id,
@@ -423,11 +460,26 @@ export function mountTimer(container, options = {}) {
     });
   }
 
-  function showToast(message) {
-    toast.textContent = message;
+  function showToast(message, action = null) {
+    toast.replaceChildren(document.createTextNode(message));
+    toast.classList.toggle('has-action', !!action);
+    if (action) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'go-toast-action';
+      btn.dataset.testid = 'toast-action';
+      btn.setAttribute('data-testid', 'toast-action');
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => {
+        toast.classList.remove('is-on', 'has-action');
+        clearTimeout(toastTimer);
+        action.run();
+      });
+      toast.appendChild(btn);
+    }
     toast.classList.add('is-on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove('is-on'), 2200);
+    toastTimer = setTimeout(() => toast.classList.remove('is-on', 'has-action'), action ? 6000 : 2200);
   }
 
   function paintSound() {
@@ -765,7 +817,25 @@ export function mountTimer(container, options = {}) {
       row.querySelector('.go-preset-row-name').textContent = preset.name;
       row.querySelector('.go-preset-row-detail').textContent = presetDetail(preset.config);
       row.addEventListener('click', () => applyPreset(preset));
-      presetList.appendChild(row);
+      const wrap = document.createElement('div');
+      wrap.className = 'go-preset-line';
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'go-trash';
+      del.setAttribute('aria-label', `Delete ${preset.name}`);
+      del.setAttribute('data-testid', 'preset-delete');
+      del.innerHTML = ICON.trash;
+      del.addEventListener('click', () => removePreset(preset));
+      wrap.append(row, del);
+      presetList.appendChild(wrap);
+    }
+    if (hiddenBuiltins.length) {
+      const restore = document.createElement('button');
+      restore.type = 'button';
+      restore.className = 'go-restore';
+      restore.textContent = 'Restore built-in presets';
+      restore.addEventListener('click', restoreBuiltins);
+      presetList.appendChild(restore);
     }
   }
 
@@ -811,20 +881,6 @@ export function mountTimer(container, options = {}) {
         onEdit();
       });
       row.appendChild(apply);
-      if (!preset.builtin) {
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'go-preset-x';
-        remove.setAttribute('aria-label', `Remove ${preset.name}`);
-        remove.textContent = '×';
-        remove.addEventListener('click', () => {
-          customPresets = customPresets.filter((item) => item.id !== preset.id);
-          paintPresets();
-          paintSheet();
-          persist();
-        });
-        row.appendChild(remove);
-      }
       presetBox.appendChild(row);
     }
     paintSheet();
@@ -894,6 +950,10 @@ export function mountTimer(container, options = {}) {
   }
 
   function setSheet(open) {
+    if (!open) {
+      workoutDeleteBtn.hidden = true;
+      editingPreset = null;
+    }
     backdrop.classList.toggle('is-open', open);
     backdrop.inert = !open;
     if (!open) settingsBtn.focus();
@@ -976,6 +1036,14 @@ export function mountTimer(container, options = {}) {
       row.querySelector('[data-act="more"]').addEventListener('click', () => openWorkoutMenu(preset));
       workoutList.appendChild(row);
     }
+    if (hiddenBuiltins.length) {
+      const restore = document.createElement('button');
+      restore.type = 'button';
+      restore.className = 'go-restore';
+      restore.textContent = 'Restore built-in workouts';
+      restore.addEventListener('click', restoreBuiltins);
+      workoutList.appendChild(restore);
+    }
   }
 
   function openWorkouts() {
@@ -999,6 +1067,8 @@ export function mountTimer(container, options = {}) {
   }
 
   function editWorkout(preset) {
+    editingPreset = preset;
+    workoutDeleteBtn.hidden = false;
     editingWorkoutId = preset.builtin ? null : preset.id;
     intent = preset.builtin ? 'save-copy' : 'save-edit';
     draft = cloneConfig(preset.config);
@@ -1067,18 +1137,11 @@ export function mountTimer(container, options = {}) {
   }
 
   function deleteWorkout(preset) {
-    if (preset.builtin) {
-      showToast('Built-in workouts stay in the list');
-      return;
-    }
-    customPresets = customPresets.filter((item) => item.id !== preset.id);
-    persist();
-    paintWorkouts();
+    removePreset(preset);
   }
 
   function openWorkoutMenu(preset) {
     menuPreset = preset;
-    workoutMenu.querySelector('[data-act="delete"]').hidden = !!preset.builtin;
     workoutMenu.hidden = false;
   }
 
@@ -1410,6 +1473,14 @@ export function mountTimer(container, options = {}) {
     }
   });
   doneBtn.addEventListener('click', () => closeSheet(true));
+  workoutDeleteBtn.addEventListener('click', () => {
+    const preset = editingPreset;
+    if (!preset) return;
+    intent = 'edit';
+    setSheet(false);
+    openWorkouts();
+    removePreset(preset);
+  });
   removeBtn.addEventListener('click', () => {
     dirty = false;
     intent = 'edit';
