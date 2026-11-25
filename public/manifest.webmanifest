@@ -1,7 +1,7 @@
 {
   "id": "./",
   "name": "Interval Timer",
-  "short_name": "Interval",
+  "short_name": "Interval Timer",
   "description": "Phone interval timer with work, rest, rounds, a stopwatch, and laps. Offline, no account.",
   "start_url": "./",
   "scope": "./",
