@@ -427,6 +427,32 @@ export function createIntervalTimer(config, deps = {}) {
     return snap;
   }
 
+  /**
+   * Go back in time by `ms` (default one minute), without cues. Works while
+   * running, paused, or just finished (then it comes back paused).
+   */
+  function rewind(ms = 60000) {
+    if (plan.stopwatch) return getSnapshot();
+    if (status !== 'running' && status !== 'paused' && status !== 'complete') return getSnapshot();
+    const from = status === 'complete' ? (plan.totalMs ?? lastElapsed) : readElapsed();
+    const target = Math.max(0, from - Math.max(0, ms));
+    if (status === 'complete') status = 'paused';
+    offsetMs = target;
+    lastElapsed = target;
+    runStartedAt = status === 'running' ? now() : null;
+    const phase = locate(plan, target);
+    lastPhaseKey = phase ? phaseKey(phase) : null;
+    announcedTick = phase ? tickBucket(phase) : null;
+    if (status === 'running') {
+      if (phase) arm(phase);
+    } else {
+      disarm();
+    }
+    const snap = getSnapshot();
+    emit('change', snap);
+    return snap;
+  }
+
   function lap() {
     if (!plan.stopwatch || status !== 'running') return getSnapshot();
     if (laps.length >= 100) return getSnapshot();
@@ -508,6 +534,7 @@ export function createIntervalTimer(config, deps = {}) {
     toggle,
     restart,
     skip,
+    rewind,
     lap,
     configure,
     restore,

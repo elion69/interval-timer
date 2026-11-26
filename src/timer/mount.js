@@ -25,6 +25,7 @@ const ICON = {
   restart: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" d="M4.4 8.93A8.2 8.2 0 1 0 15.6 4.9"/><path fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round" d="M18.4 0.2L11.9 4.75L15.1 10.6Z"/></svg>`,
   play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.2v13.6L19.2 12 8 5.2z"/></svg>`,
   pause: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor"/></svg>`,
+  rewind: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11.6 6.2v11.6L3.4 12zM20.6 6.2v11.6L12.4 12z"/></svg>`,
   skip: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 5.4v13.2L14.6 12 5 5.4z"/><rect x="16.2" y="5.4" width="2.6" height="13.2" rx="0.6" fill="currentColor"/></svg>`,
   stopwatch: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 13V9.2M9.2 3.2h5.6M12 3.2v2.2"/></svg>`,
   lap: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 4v16M6 5h10l-2.2 3.2L16 11.5H6"/></svg>`,
@@ -120,6 +121,7 @@ export function mountTimer(container, options = {}) {
       <div class="go-stack" data-testid="stack" hidden></div>
       <div class="go-controls">
         <button type="button" data-testid="restart" aria-label="Restart">${ICON.restart}</button>
+        <button type="button" class="go-back1" data-testid="rewind" aria-label="Back one minute">${ICON.rewind}<span>1 min</span></button>
         <button type="button" class="go-primary" data-testid="toggle" aria-label="Start">${ICON.play}</button>
         <button type="button" data-testid="skip" aria-label="Skip to next phase">${ICON.skip}</button>
       </div>
@@ -325,6 +327,9 @@ export function mountTimer(container, options = {}) {
   const restartBtn = q('[data-testid="restart"]');
   const toggleBtn = q('[data-testid="toggle"]');
   const skipBtn = q('[data-testid="skip"]');
+  const rewindBtn = q('[data-testid="rewind"]');
+  let rewindTotal = 0;
+  let rewindReset = 0;
   const live = q('[data-testid="live"]');
   const backdrop = q('[data-testid="backdrop"]');
   const sheet = q('.go-sheet');
@@ -596,6 +601,8 @@ export function mountTimer(container, options = {}) {
     skipBtn.disabled = stopwatch ? !running : !(running || snap.status === 'paused');
     skipBtn.setAttribute('aria-label', stopwatch ? 'Lap' : 'Skip to next phase');
     restartBtn.disabled = stopwatch && snap.totalElapsedMs === 0 && snap.status === 'idle';
+    rewindBtn.hidden = stopwatch;
+    rewindBtn.disabled = stopwatch || snap.status === 'idle' || (snap.totalElapsedMs === 0 && snap.status !== 'complete');
     restartBtn.setAttribute('aria-label', stopwatch ? 'Reset' : 'Restart');
 
     const title = stopwatch
@@ -1421,6 +1428,20 @@ export function mountTimer(container, options = {}) {
   restartBtn.addEventListener('click', () => {
     alerts.unlock();
     focusedTimer().restart();
+  });
+  rewindBtn.addEventListener('click', () => {
+    alerts.unlock();
+    const timer = focusedTimer();
+    const before = timer.getSnapshot().totalElapsedMs;
+    const after = timer.rewind(60000).totalElapsedMs;
+    const moved = Math.max(0, before - after);
+    // Taps in a row add up in the message: "Back 1 min", "Back 2 min"...
+    rewindTotal += moved;
+    clearTimeout(rewindReset);
+    rewindReset = setTimeout(() => { rewindTotal = 0; }, 2500);
+    const mins = Math.round(rewindTotal / 60000);
+    showToast(mins >= 1 ? `Back ${mins} min` : 'Back to the start');
+    try { navigator.vibrate?.(15); } catch { /* ignore */ }
   });
   skipBtn.addEventListener('click', () => {
     alerts.unlock();

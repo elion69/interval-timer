@@ -334,3 +334,35 @@ test('chip labels prefer a saved preset name', () => {
     { mode: 'countdown', workMs: 1, restMs: 0, warmupMs: 0, rounds: 1, durationMs: 300_000 },
   ), true);
 });
+
+test('rewind goes back one minute per press, silently, and never below zero', () => {
+  const h = harness({ mode: 'interval', workMs: 60000, restMs: 0, warmupMs: 0, rounds: 10 });
+  h.timer.start();
+  h.advance(4 * 60000 + 20000); // round 5, 20 s in
+  assert.equal(h.timer.getSnapshot().phase.round, 5);
+  const before = h.cues.length;
+  h.timer.rewind();
+  assert.equal(h.timer.getSnapshot().totalElapsedMs, 3 * 60000 + 20000);
+  assert.equal(h.timer.getSnapshot().phase.round, 4);
+  h.timer.rewind();
+  h.timer.rewind();
+  assert.equal(h.timer.getSnapshot().phase.round, 2);
+  assert.equal(h.cues.length, before, 'no bells or voice on rewind');
+  h.timer.rewind();
+  h.timer.rewind();
+  assert.equal(h.timer.getSnapshot().totalElapsedMs, 0);
+  assert.equal(h.timer.getSnapshot().status, 'running');
+  h.advance(60000);
+  assert.equal(h.timer.getSnapshot().phase.round, 2, 'keeps counting forward after rewinding');
+});
+
+test('rewind after the workout finished brings it back paused', () => {
+  const h = harness({ mode: 'interval', workMs: 60000, restMs: 0, warmupMs: 0, rounds: 3 });
+  h.timer.start();
+  h.advance(3 * 60000 + 500);
+  assert.equal(h.timer.getSnapshot().status, 'complete');
+  h.timer.rewind();
+  const snap = h.timer.getSnapshot();
+  assert.equal(snap.status, 'paused');
+  assert.equal(snap.phase.round, 3);
+});
