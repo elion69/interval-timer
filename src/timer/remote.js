@@ -22,8 +22,15 @@ function seconds(value, fallback = 0) {
   return Math.round(n);
 }
 
-/** Turn a command workout field into a timer config, or a name to look up. */
+/** Turn a command workout field into a timer config, or a name to look up. A `name` on the workout labels it. */
 export function workoutSpec(workout) {
+  const spec = baseSpec(workout);
+  const name = workout && typeof workout === 'object' ? String(workout.name || '').trim().slice(0, 24) : '';
+  if (spec && spec.kind === 'config' && name) spec.label = name;
+  return spec;
+}
+
+function baseSpec(workout) {
   if (typeof workout === 'string') return { kind: 'name', name: workout };
   if (!workout || typeof workout !== 'object') return null;
   if (workout.stopwatch) {
@@ -74,12 +81,14 @@ export function evaluateCommand(command, { now = Date.now(), lastId = null, work
     return { id, action, label: '', config: null };
   }
 
+  // "alongside": true (default) starts it as its own timer when another one is already going.
+  const alongside = command.alongside !== false;
   const spec = workoutSpec(command.workout);
-  if (!spec) return { id, action: 'start', label: 'current timer', config: null };
-  if (spec.kind === 'config') return { id, action: 'start', label: spec.label, config: spec.config };
+  if (!spec) return { id, action: 'start', label: 'current timer', config: null, alongside: false };
+  if (spec.kind === 'config') return { id, action: 'start', label: spec.label, config: spec.config, alongside };
   const match = findWorkout(workouts, spec.name);
   if (!match) return { id, action: 'missing', label: spec.name, config: null };
-  return { id, action: 'start', label: match.name, config: { ...match.config } };
+  return { id, action: 'start', label: match.name, config: { ...match.config }, alongside };
 }
 
 export function startRemoteCommands({ workouts, onCommand, storage = globalThis.localStorage } = {}) {

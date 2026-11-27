@@ -1703,14 +1703,23 @@ export function mountTimer(container, options = {}) {
           showToast('Stopped by Captain');
           return;
         }
-        if (decision.config) {
-          session.timer.configure(decision.config);
-          rack.setLabel(session.id, decision.label);
-        }
         try {
           alerts.unlock();
         } catch {
           /* A background tab can refuse audio until the next tap. */
+        }
+        // Something already going in front: run the new one as its own timer beside it.
+        const busy = ['running', 'paused'].includes(session.timer.getSnapshot().status);
+        if (decision.config && decision.alongside && busy && rack.list().length < 6) {
+          const added = rack.add(decision.config, { label: decision.label });
+          rack.focus(added.id);
+          added.timer.start();
+          showToast(`Started: ${decision.label}. The other timer keeps going.`);
+          return;
+        }
+        if (decision.config) {
+          session.timer.configure(decision.config);
+          rack.setLabel(session.id, decision.label);
         }
         session.timer.start();
         showToast(`Started by Captain: ${decision.label}`);
