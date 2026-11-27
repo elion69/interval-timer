@@ -1,11 +1,11 @@
 /**
  * Remote commands from a public JSON file.
- * Polls only while the page is visible. Failures are ignored so the timer still works offline.
+ * Polls on screen and in the background. Failures are ignored so the timer still works offline.
  */
 
 const COMMAND_URL = 'https://api.github.com/repos/elion69/interval-timer/contents/remote/command.json?ref=main';
 const LAST_ID_KEY = 'go-timer.remote-command-id';
-const MAX_AGE_MS = 2 * 60 * 1000;
+const MAX_AGE_MS = 3 * 60 * 1000; // a backgrounded page may only check once a minute
 const POLL_MS = 5000;
 
 export function findWorkout(workouts, name) {
@@ -113,7 +113,9 @@ export function startRemoteCommands({ workouts, onCommand, storage = globalThis.
   }
 
   async function poll() {
-    if (stopped || document.visibilityState === 'hidden') return;
+    if (stopped) return;
+    // Keeps checking in the background too (Chrome slows a hidden page to about once a minute),
+    // so a start from Captain or Claude runs without opening the app.
     try {
       const headers = { Accept: 'application/vnd.github.raw' };
       if (etag) headers['If-None-Match'] = etag;
@@ -136,7 +138,7 @@ export function startRemoteCommands({ workouts, onCommand, storage = globalThis.
   }
 
   function startLoop() {
-    if (timerId || stopped || document.visibilityState === 'hidden') return;
+    if (timerId || stopped) return;
     timerId = window.setInterval(poll, POLL_MS);
   }
 
@@ -147,11 +149,8 @@ export function startRemoteCommands({ workouts, onCommand, storage = globalThis.
   }
 
   function onVisibility() {
-    if (document.visibilityState === 'hidden') {
-      stopLoop();
-      return;
-    }
-    poll();
+    // Coming back on screen: check right away.
+    if (document.visibilityState === 'visible') poll();
     startLoop();
   }
 

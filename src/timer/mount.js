@@ -261,6 +261,11 @@ export function mountTimer(container, options = {}) {
             <span>Keep running with the screen off</span>
             <button type="button" class="go-switch" data-pref="keepAlive" data-testid="pref-keep-alive" role="switch" aria-checked="true" aria-label="Keep running with the screen off"><i></i></button>
           </div>
+          <div class="go-switch-row go-pref-row">
+            <span>Listen for remote starts in the background</span>
+            <button type="button" class="go-switch" data-pref="remoteListen" data-testid="pref-remote-listen" role="switch" aria-checked="true" aria-label="Listen for remote starts in the background"><i></i></button>
+          </div>
+          <p class="go-note">With this on, Captain or Claude can start a timer while you're in another app or the screen is off. Open the timer once and tap anything; after that, leave it running in the background (don't swipe it away). It uses the same very quiet sound to stay awake.</p>
           <p class="go-note">With this on, a very quiet background sound keeps the timer firing while the phone is locked. It plays alongside your music instead of stopping it. Turn the phone's media volume up: the timer uses it.</p>
           <p class="go-note">The voice and sounds are for the timer in front. Extra timers in the stack keep their own short beeps.</p>
           <div class="go-activity" data-testid="activity-log">
@@ -1230,9 +1235,14 @@ export function mountTimer(container, options = {}) {
     if (rack.anyRunning()) refreshSchedule();
   }, 20000);
 
+  /** Stay awake while a timer runs, or while listening for remote starts. */
+  function keepAwake() {
+    alerts.setRunning(rack.anyRunning() || !!alerts.prefs.remoteListen);
+  }
+
   function onRackChange() {
     wake.setActive(rack.anyRunning());
-    alerts.setRunning(rack.anyRunning());
+    keepAwake();
     refreshSchedule();
     persist();
     render();
@@ -1299,9 +1309,9 @@ export function mountTimer(container, options = {}) {
   render();
   if (rack.anyRunning()) {
     wake.setActive(true);
-    alerts.setRunning(true);
     kick();
   }
+  keepAwake();
   backdrop.inert = true;
   presetBackdrop.inert = true;
 
@@ -1353,6 +1363,7 @@ export function mountTimer(container, options = {}) {
 
   function setPref(patch) {
     alerts.setPrefs(patch);
+    keepAwake();
     refreshSchedule();
     paintSoundSheet();
     persist();
