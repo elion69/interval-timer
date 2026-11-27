@@ -1,5 +1,6 @@
 import { planTimer } from './engine.js';
 import { createTimerRack } from './rack.js';
+import { createActivityLog } from './activity-log.js';
 import { createAlerts } from './audio.js';
 import { createWakeLock } from './wake.js';
 import { SOUND_CHOICES } from './sounds.js';
@@ -262,6 +263,16 @@ export function mountTimer(container, options = {}) {
           </div>
           <p class="go-note">With this on, a very quiet background sound keeps the timer firing while the phone is locked. It plays alongside your music instead of stopping it. Turn the phone's media volume up: the timer uses it.</p>
           <p class="go-note">The voice and sounds are for the timer in front. Extra timers in the stack keep their own short beeps.</p>
+          <div class="go-activity" data-testid="activity-log">
+            <span class="go-field-label">Workout log</span>
+            <p class="go-note" data-activity-status>Ledger not connected.</p>
+            <p class="go-note">Every finished workout is saved on the phone with its start and end time, then sent to your Activity Ledger. Paste the setup code once, here or in Counter.</p>
+            <textarea class="go-activity-code" data-activity-code rows="2" placeholder="Paste the ledger setup code" spellcheck="false" autocomplete="off"></textarea>
+            <div class="go-activity-row">
+              <button type="button" class="go-presets-btn" data-activity="connect">Connect ledger</button>
+              <button type="button" class="go-presets-btn" data-activity="sync">Sync now</button>
+            </div>
+          </div>
           <div class="go-done-wrap">
             <button type="button" class="go-done" data-testid="sound-close">Done</button>
           </div>
@@ -398,6 +409,8 @@ export function mountTimer(container, options = {}) {
   settingsBtn.innerHTML = ICON.menu;
 
   const rack = createTimerRack(options.clock || {});
+  // Logs each finished workout to the Activity Ledger (offline first; shared with the Counter app).
+  const activityLog = createActivityLog({ rack, panel: q('[data-testid="activity-log"]'), toast: (m) => showToast(m) });
 
   function focusedTimer() {
     return rack.focused().timer;
@@ -1716,6 +1729,7 @@ export function mountTimer(container, options = {}) {
     remote.stop();
     wake.destroy();
     alerts.close();
+    activityLog.destroy();
     rack.destroy();
     shell.remove();
   }

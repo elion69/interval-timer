@@ -907,3 +907,9 @@ button, input { font-family: inherit; }
 .go-controls .go-back1 svg { width: 30px; height: 30px; }
 .go-controls .go-back1 span { font-size: 13px; font-weight: 600; color: #ddd; letter-spacing: 0.02em; }
 .go-controls .go-back1[hidden] { display: none; }
+
+/* ---- Workout log (Activity Ledger) ---- */
+.go-activity { margin: 8px 0 14px; padding-top: 12px; border-top: 1px solid #242424; }
+.go-activity-code { font-family: inherit; width: 100%; box-sizing: border-box; background: #1a1a1a; color: #fff; border: 1px solid #2a2a2a; border-radius: 12px; padding: 10px 12px; font-size: 14px; resize: vertical; margin-bottom: 10px; }
+.go-activity-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.go-activity-row .go-presets-btn { height: 44px; }
